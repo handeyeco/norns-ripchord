@@ -297,7 +297,7 @@ end
 function get_presets()
   local cb = function(text)
       -- Get a list of filenames
-      for line in string.gmatch(text, "/[%w%s_]+.rpc") do
+      for line in string.gmatch(text, "/[%w%s_-]+.rpc") do
           name = string.sub(line, 2, -5)
           table.insert(file_names, name)
       end
