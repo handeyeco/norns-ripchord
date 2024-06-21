@@ -8,6 +8,21 @@ key_map = {}
 low_note = 36
 octaves = 4
 
+pressed_notes = {}
+
+in_midi = midi.connect()
+in_midi.event = function(data)
+  local message = midi.to_msg(data)
+
+  if message.type == "note_on" then
+    pressed_notes[message.note] = message.note
+  elseif message.type == "note_off" then
+    pressed_notes[message.note] = nil
+  end
+
+  redraw()
+end
+
 function generate_key_map()
   for i=1,octaves do
     local baseNoteNumber = ((i - 1) * 12) + low_note
@@ -83,9 +98,14 @@ function drawPreset()
   local yPos = 45
   local xPos = 1
 
-  screen.level(2)
   for _, note in pairs(sorted_keys) do
     local name = key_map[note]
+    if pressed_notes[note] then
+      screen.level(15)
+    else
+      screen.level(2)
+    end
+
     if string.len(name) == 2 then
       yPos = 45
       screen.rect(xPos, yPos, 2, 2)
