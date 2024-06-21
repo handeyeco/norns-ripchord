@@ -19,9 +19,8 @@ function print_file(filepath)
   end
 end
 
-function parsePreset()
-  presets = util.scandir(_path.code..'ripchord/presets')
-  print_file(_path.code..'ripchord/presets/'..presets[1])
+function parsePreset(preset)
+  print_file(_path.data..'ripchord/presets/'..preset..".rpc")
 end
 
 function init()
@@ -83,8 +82,7 @@ function get_presets()
       redraw()
   end
 
-  print("running")
-  norns.system_cmd('find '.._path.code..'ripchord/presets -name *.rpc', cb)
+  norns.system_cmd('find '.._path.data..'ripchord/presets -name *.rpc', cb)
 end
 
 function handlePresetEnc(n,d)
@@ -95,7 +93,7 @@ end
 
 function handlePresetKey(n,z)
   if (n == 3) then
-    parsePreset()
+    parsePreset(file_names[active_preset_index])
   end
 end
 
