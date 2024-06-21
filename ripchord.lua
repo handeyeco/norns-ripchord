@@ -10,8 +10,10 @@ octaves = 4
 
 note_map_to_display = nil
 
+selected_preset_name = nil
 -- 2D array: note to notes mapping
 note_to_notes = {}
+-- names of note to notes mappings
 mapping_names = {}
 
 -- which notes are pressed
@@ -19,25 +21,64 @@ pressed_notes = {}
 -- which notes are playing
 active_notes = {}
 
-in_midi = midi.connect()
-in_midi_ch = 1
-out_midi = midi.connect()
-out_midi_ch = 1
+transpose_input = 0
+transpose_output = 0
 
-in_midi.event = function(data)
-  local message = midi.to_msg(data)
+-- stuff for the MIDI menu
+-- that's not working
+active_midi_index = 1
+in_midi_index = 1
+in_midi = midi.connect(in_midi_index)
+in_midi_channel = 1
+out_midi_index = 1
+out_midi = midi.connect(out_midi_index)
+out_midi_channel = 1
 
-  if message.type == "note_on" then
-    pressed_notes[message.note] = message.note
-    diff_output()
-    updateMapNameState(message.note, true)
-  elseif message.type == "note_off" then
-    pressed_notes[message.note] = nil
-    diff_output()
-    updateMapNameState(message.note, false)
+function init()
+  setupMidiCallback()
+  get_presets()
+end
+
+function setupMidiCallback()
+  midi.cleanup()
+  in_midi.event = function(data)
+    local message = midi.to_msg(data)
+  
+    if (message.ch == in_midi_channel) then
+      if message.type == "note_on" then
+        pressed_notes[message.note] = message.note
+        diff_output()
+        updateMapNameState(message.note, true)
+      elseif message.type == "note_off" then
+        pressed_notes[message.note] = nil
+        diff_output()
+        updateMapNameState(message.note, false)
+      end
+    end
+  
+    redraw()
   end
+end
 
-  redraw()
+function stop_all_notes()
+  for note=21,108 do
+    for ch=1,16 do
+      out_midi:note_off(note, 100, ch)
+    end
+  end
+  pressed_notes = {}
+  active_notes = {}
+  note_map_to_display = nil
+end
+
+function drawMidiOptions()
+  tab.print(midi.devices[1])
+  tab.print(midi.devices[2])
+  print("====")
+  drawLine(0, "in:", in_midi_index.." "..midi.devices[in_midi_index].name, active_midi_index==1)
+  drawLine(10, "in ch:", in_midi_channel, active_midi_index==2)
+  drawLine(20, "out:", out_midi_index .." "..midi.devices[out_midi_index].name, active_midi_index==3)
+  drawLine(30, "out ch:", out_midi_channel, active_midi_index==4)
 end
 
 function updateMapNameState(note, on)
@@ -65,14 +106,14 @@ function diff_output()
   -- send new notes
   for _, next_note in pairs(next_notes) do
     if not active_notes[next_note] then
-      out_midi:note_on(next_note)
+      out_midi:note_on(next_note, 100, out_midi_channel)
     end
   end
 
   -- stop old notes
   for _, active_note in pairs(active_notes) do
     if not next_notes[active_note] then
-      out_midi:note_off(active_note)
+      out_midi:note_off(active_note, 100, out_midi_channel)
     end
   end
 
@@ -92,6 +133,7 @@ function generate_key_map()
 end
 
 function load_preset(preset)
+  selected_preset_name = preset
   local path = _path.data..'ripchord/presets/'..preset..".rpc"
   local f=io.open(path,"r")
   note_to_notes = {}
@@ -107,7 +149,6 @@ function load_preset(preset)
       i, j = string.find(line, 'note="%d+"')
       if i and j then
         match = string.sub(line,i+6,j-1)
-        print(match)
         inNote = match
       end
 
@@ -116,7 +157,6 @@ function load_preset(preset)
       if i and j then
         outNotes = {}
         match = string.sub(line,i+7,j-1)
-        print(match)
         for token in string.gmatch(match, "[0-9]+") do
           table.insert(outNotes, tonumber(token))
         end
@@ -127,27 +167,17 @@ function load_preset(preset)
       i, j = string.find(line, 'name="[^"]+"')
       if i and j then
         match = string.sub(line,i+6,j-1)
-        print(match)
         mapping_names[tonumber(inNote)] = match
       end
 
     end
   end
 
-  for k, v in pairs(note_to_notes) do
-    print(k)
-    tab.print(v)
-  end
-
   page = 1
   redraw()
 end
 
-function init()
-  get_presets()
-end
-
-function drawLine(yPos, leftText, active)
+function drawLine(yPos, leftText, rightText, active)
   local textPos = yPos + 7
   if active then
     screen.level(15)
@@ -161,6 +191,7 @@ function drawLine(yPos, leftText, active)
   screen.move(1, textPos)
   screen.text(leftText)
   screen.move(128-1, textPos)
+  screen.text_right(rightText)
 end
 
 function drawPresets()
@@ -175,6 +206,7 @@ function drawPresets()
     drawLine(
       yPos,
       file,
+      "",
       active_preset_index == i
     )
   end
@@ -231,6 +263,12 @@ function drawPreset()
     screen.text(mapping_to_display)
   end
 
+  if selected_preset_name then
+    screen.level(2)
+    screen.move(1, 10)
+    screen.text(selected_preset_name)
+  end
+
   drawKeyboard(44, pressed_notes, note_to_notes)
   drawKeyboard(54, active_notes, {})
 end
@@ -242,6 +280,8 @@ function redraw()
     drawPresets()
   elseif page == 1 then
     drawPreset()
+  elseif page == 2 then
+    drawMidiOptions()
   end
   screen.update()
 end
@@ -273,15 +313,37 @@ function handlePresetKey(n,z)
   end
 end
 
+function handleMidiEncoder(n,d)
+  if n == 2 then
+    active_midi_index = util.clamp(active_midi_index + d, 1, 4)
+  elseif n == 3 then
+    if (active_midi_index == 1) then
+      in_midi_index = util.clamp(in_midi_index + d, 1, #midi.devices)
+      in_midi = midi.connect(in_midi_index)
+      setupMidiCallback()
+    elseif (active_midi_index == 2) then
+      in_midi_channel = util.clamp(in_midi_channel + d, 1, 16)
+    elseif (active_midi_index == 3) then
+      stop_all_notes()
+      out_midi_index = util.clamp(out_midi_index + d, 1, #midi.devices)
+      out_midi = midi.connect(out_midi_index)
+    elseif (active_midi_index == 4) then
+      stop_all_notes()
+      out_midi_channel = util.clamp(out_midi_channel + d, 1, 16)
+    end
+  end
+end
+
 function enc(n,d)
   if (n == 1) then
-    page = util.clamp(page + d, 0, 1)
+    page = util.clamp(page + d, 0, 2)
   elseif (page == 0) then
     handlePresetEnc(n,d)
+  elseif (page == 2) then
+    handleMidiEncoder(n,d)
   end
   redraw()
 end
-
 
 function key(n,z)
   if (z == 1) then
