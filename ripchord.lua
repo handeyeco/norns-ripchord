@@ -5,8 +5,8 @@ active_preset_index = 1
 file_names = {}
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 key_map = {}
-low_note = 24
-octaves = 6
+low_note = 36
+octaves = 4
 
 function generate_key_map()
   for i=1,octaves do
@@ -81,34 +81,22 @@ function drawPreset()
 
   local sorted_keys = tab.sort(key_map)
   local yPos = 45
-  local xPos = 0
-  screen.level(15)
-  for _, note in pairs(sorted_keys) do
-    local name = key_map[note]
-    -- white notes go first
-    -- since black notes are drawn above
-    if string.len(name) == 2 then
-      screen.rect(xPos, yPos, 3, 5)
-      screen.fill()
-      xPos = xPos + 3
-    end
-  end
+  local xPos = 1
 
-  xPos = 2
-  screen.level(0)
+  screen.level(2)
   for _, note in pairs(sorted_keys) do
     local name = key_map[note]
-    -- white notes go first
-    -- since black notes are drawn above
-    if string.len(name) == 3 then
-      screen.rect(xPos, yPos, 2, 3)
-      screen.fill()
-      local letter = string.sub(name, 1, 1)
-      if letter == "A" or letter == "D" then
-        xPos = xPos + 6
-      else
-        xPos = xPos + 3
-      end
+    if string.len(name) == 2 then
+      yPos = 45
+      screen.rect(xPos, yPos, 2, 2)
+      screen.stroke()
+      xPos = xPos + 4
+    else
+      yPos = 41
+      xPos = xPos - 2
+      screen.rect(xPos, yPos, 2, 2)
+      screen.stroke()
+      xPos = xPos + 2
     end
   end
 end
