@@ -9,19 +9,54 @@ low_note = 36
 octaves = 4
 
 note_to_notes = {}
+active_notes = {}
 pressed_notes = {}
 
 in_midi = midi.connect()
+in_midi_ch = 1
+out_midi = midi.connect()
+out_midi_ch = 1
+
 in_midi.event = function(data)
   local message = midi.to_msg(data)
 
   if message.type == "note_on" then
     pressed_notes[message.note] = message.note
+    diff_output()
   elseif message.type == "note_off" then
     pressed_notes[message.note] = nil
+    diff_output()
   end
 
   redraw()
+end
+
+function diff_output()
+  local next_notes = {}
+
+  for _, pressed_note in pairs(pressed_notes) do
+    if note_to_notes[pressed_note] then
+      for _, mapped_note in pairs(note_to_notes[pressed_note]) do
+        next_notes[mapped_note] = mapped_note
+      end
+    else
+      next_notes[pressed_note] = pressed_note
+    end
+  end
+
+  for _, next_note in pairs(next_notes) do
+    if not active_notes[next_note] then
+      out_midi:note_on(next_note)
+    end
+  end
+
+  for _, active_note in pairs(active_notes) do
+    if not next_notes[active_note] then
+      out_midi:note_off(active_note)
+    end
+  end
+
+  active_notes = next_notes
 end
 
 function generate_key_map()
@@ -133,29 +168,32 @@ function drawKey(xPos, yPos, highlighted, filled)
   end
 end
 
-function drawPreset()
-  generate_key_map()
-
+function drayKeyboard(yPos, notesToHighlight, notesToFill)
   local sorted_keys = tab.sort(key_map)
-  local yPos = 45
-  local xPos = 1
+
+  local xPos = 10
 
   for _, note in pairs(sorted_keys) do
     local name = key_map[note]
-    local highlight = pressed_notes[note]
-    local fill = note_to_notes[note]
+    local highlight = notesToHighlight[note]
+    local fill = notesToFill[note]
 
     if string.len(name) == 2 then
-      yPos = 45
       drawKey(xPos, yPos, highlight, fill)
       xPos = xPos + 4
     else
-      yPos = 41
       xPos = xPos - 2
-      drawKey(xPos, yPos, highlight, fill)
+      drawKey(xPos, yPos - 4, highlight, fill)
       xPos = xPos + 2
     end
   end
+end
+
+function drawPreset()
+  generate_key_map()
+
+  drayKeyboard(45, pressed_notes, note_to_notes)
+  drayKeyboard(55, active_notes, {})
 end
 
 function redraw()
