@@ -21,7 +21,6 @@ pressed_notes = {}
 -- which notes are playing
 active_notes = {}
 
-transpose_input = 0
 transpose_output = 0
 
 -- stuff for the MIDI menu
@@ -43,6 +42,7 @@ function setupMidiCallback()
   midi.cleanup()
   in_midi.event = function(data)
     local message = midi.to_msg(data)
+    tab.print(message)
   
     if (message.ch == in_midi_channel) then
       if message.type == "note_on" then
@@ -84,7 +84,7 @@ end
 function updateMapNameState(note, on)
   if on == false and note == note_map_to_display then
     note_map_to_display = nil
-  elseif on ==true then
+  elseif on == true and mapping_names[note] then
     note_map_to_display = note
   end
 end
@@ -96,10 +96,12 @@ function diff_output()
   for _, pressed_note in pairs(pressed_notes) do
     if note_to_notes[pressed_note] then
       for _, mapped_note in pairs(note_to_notes[pressed_note]) do
-        next_notes[mapped_note] = mapped_note
+        local transposed = mapped_note + transpose_output
+        next_notes[transposed] = transposed
       end
     else
-      next_notes[pressed_note] = pressed_note
+      local transposed = pressed_note + transpose_output
+      next_notes[transposed] = transposed
     end
   end
 
@@ -123,7 +125,7 @@ end
 function generate_key_map()
   for i=1,octaves do
     local baseNoteNumber = ((i - 1) * 12) + low_note
-    local baseOctaveNumber = 3 + (i - 1)
+    local baseOctaveNumber = i + 1
     for j, v in pairs(notes) do
       local noteNumber = baseNoteNumber + (j - 1)
       local note = v..baseOctaveNumber
@@ -249,28 +251,34 @@ function drawKeyboard(yPos, notesToHighlight, notesToFill)
   end
 end
 
-function drawPreset()
+function drawRipchord()
   generate_key_map()
+  screen.level(2)
 
-  local mapping_to_display = ""
-  if note_map_to_display then
-    mapping_to_display = key_map[note_map_to_display]
-    if mapping_names[note_map_to_display] then
-      mapping_to_display = mapping_to_display..": "..mapping_names[note_map_to_display]
-    end
-    screen.level(2)
-    screen.move(1, 64)
-    screen.text(mapping_to_display)
-  end
-
+  local preset_text = "preset: "
   if selected_preset_name then
-    screen.level(2)
-    screen.move(1, 10)
-    screen.text(selected_preset_name)
+    preset_text = preset_text..selected_preset_name
+  else
+    preset_text = preset_text.."none"
   end
+  screen.move(1, 10)
+  screen.text(preset_text)
+
+  screen.move(1, 20)
+  screen.text("output transpose: "..transpose_output)
 
   drawKeyboard(44, pressed_notes, note_to_notes)
   drawKeyboard(54, active_notes, {})
+
+  if note_map_to_display then
+    local mapping_to_display = key_map[note_map_to_display]
+    if mapping_names[note_map_to_display] then
+      mapping_to_display = mapping_to_display..": "..mapping_names[note_map_to_display]
+    end
+    screen.move(1, 64)
+    screen.level(2)
+    screen.text(mapping_to_display)
+  end
 end
 
 function redraw()
@@ -279,7 +287,7 @@ function redraw()
   if page == 0 then
     drawPresets()
   elseif page == 1 then
-    drawPreset()
+    drawRipchord()
   elseif page == 2 then
     drawMidiOptions()
   end
@@ -301,13 +309,23 @@ function get_presets()
   norns.system_cmd('find '.._path.data..'ripchord/presets -name *.rpc', cb)
 end
 
-function handlePresetEnc(n,d)
+function handlePresetsEnc(n,d)
   if (n == 2) then
     active_preset_index = util.clamp(active_preset_index + d, 1, #file_names)
   end
 end
 
-function handlePresetKey(n,z)
+function handleRipchordEnc(n,d)
+  if (n == 3) then
+    local prev_transpose_output = transpose_output
+    transpose_output = util.clamp(transpose_output + d, -24, 24)
+    if prev_transpose_output ~= transpose_output then
+      diff_output()
+    end
+  end
+end
+
+function handlePresetsKey(n,z)
   if (n == 3) then
     load_preset(file_names[active_preset_index])
   end
@@ -338,7 +356,9 @@ function enc(n,d)
   if (n == 1) then
     page = util.clamp(page + d, 0, 2)
   elseif (page == 0) then
-    handlePresetEnc(n,d)
+    handlePresetsEnc(n,d)
+  elseif (page == 1) then
+    handleRipchordEnc(n,d)
   elseif (page == 2) then
     handleMidiEncoder(n,d)
   end
@@ -348,7 +368,7 @@ end
 function key(n,z)
   if (z == 1) then
     if (page == 0) then
-      handlePresetKey(n,z)
+      handlePresetsKey(n,z)
     end
   end
   redraw()
