@@ -1,8 +1,24 @@
 -- ripchord
 
-page = 0
+page = 1
 active_preset_index = 1
 file_names = {}
+notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+key_map = {}
+low_note = 24
+octaves = 6
+
+function generate_key_map()
+  for i=1,octaves do
+    local baseNoteNumber = ((i - 1) * 12) + low_note
+    local baseOctaveNumber = 3 + (i - 1)
+    for j, v in pairs(notes) do
+      local noteNumber = baseNoteNumber + (j - 1)
+      local note = v..baseOctaveNumber
+      key_map[noteNumber] = note
+    end
+  end
+end
 
 function print_file(filepath)
   print(filepath)
@@ -58,7 +74,43 @@ function drawPresets()
       active_preset_index == i
     )
   end
+end
 
+function drawPreset()
+  generate_key_map()
+
+  local sorted_keys = tab.sort(key_map)
+  local yPos = 45
+  local xPos = 0
+  screen.level(15)
+  for _, note in pairs(sorted_keys) do
+    local name = key_map[note]
+    -- white notes go first
+    -- since black notes are drawn above
+    if string.len(name) == 2 then
+      screen.rect(xPos, yPos, 3, 5)
+      screen.fill()
+      xPos = xPos + 3
+    end
+  end
+
+  xPos = 2
+  screen.level(0)
+  for _, note in pairs(sorted_keys) do
+    local name = key_map[note]
+    -- white notes go first
+    -- since black notes are drawn above
+    if string.len(name) == 3 then
+      screen.rect(xPos, yPos, 2, 3)
+      screen.fill()
+      local letter = string.sub(name, 1, 1)
+      if letter == "A" or letter == "D" then
+        xPos = xPos + 6
+      else
+        xPos = xPos + 3
+      end
+    end
+  end
 end
 
 function redraw()
@@ -66,6 +118,8 @@ function redraw()
   screen.fill()
   if page == 0 then
     drawPresets()
+  elseif page == 1 then
+    drawPreset()
   end
   screen.update()
 end
