@@ -1,6 +1,6 @@
 -- ripchord
 
-page = 1
+page = 0
 active_preset_index = 1
 file_names = {}
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
@@ -8,6 +8,7 @@ key_map = {}
 low_note = 36
 octaves = 4
 
+note_to_notes = {}
 pressed_notes = {}
 
 in_midi = midi.connect()
@@ -35,23 +36,48 @@ function generate_key_map()
   end
 end
 
-function print_file(filepath)
-  print(filepath)
-  local f=io.open(filepath,"r")
+function load_preset(preset)
+  local path = _path.data..'ripchord/presets/'..preset..".rpc"
+  local f=io.open(path,"r")
+  note_to_notes = {}
+  local inNote = nil
+  local outNotes = {}
   if f==nil then
-    print("file not found: "..filepath)
+    print("file not found: "..path)
   else
     f:close()
-    for line in io.lines(filepath) do
-      -- this is where you would do something useful!
-      -- but for now we'll just print each line
-      print(line)
+    local i, j, match
+    for line in io.lines(path) do
+      -- look for incoming note
+      i, j = string.find(line, 'note="%d+"')
+      if i and j then
+        match = string.sub(line,i,j)
+        i, j = string.find(match, '%d+')
+        inNote = string.sub(match,i,j)
+      end
+
+      -- look for mapped notes
+      i, j = string.find(line, 'notes="[0-9;]+"')
+      if i and j then
+        outNotes = {}
+        match = string.sub(line,i,j)
+        i, j = string.find(match, '[0-9;]+')
+        match = string.sub(match,i,j)
+        for token in string.gmatch(match, "[0-9]+") do
+          table.insert(outNotes, tonumber(token))
+        end
+        note_to_notes[tonumber(inNote)] = outNotes
+      end
     end
   end
-end
 
-function parsePreset(preset)
-  print_file(_path.data..'ripchord/presets/'..preset..".rpc")
+  for k, v in pairs(note_to_notes) do
+    print(k)
+    tab.print(v)
+  end
+
+  page = 1
+  redraw()
 end
 
 function init()
@@ -91,6 +117,22 @@ function drawPresets()
   end
 end
 
+function drawKey(xPos, yPos, highlighted, filled)
+  if highlighted then
+    screen.level(15)
+  else
+    screen.level(2)
+  end
+
+  if filled then
+    screen.rect(xPos - 1, yPos - 1, 3, 3)
+    screen.fill()
+  else
+    screen.rect(xPos, yPos, 2, 2)
+    screen.stroke()
+  end
+end
+
 function drawPreset()
   generate_key_map()
 
@@ -100,22 +142,17 @@ function drawPreset()
 
   for _, note in pairs(sorted_keys) do
     local name = key_map[note]
-    if pressed_notes[note] then
-      screen.level(15)
-    else
-      screen.level(2)
-    end
+    local highlight = pressed_notes[note]
+    local fill = note_to_notes[note]
 
     if string.len(name) == 2 then
       yPos = 45
-      screen.rect(xPos, yPos, 2, 2)
-      screen.stroke()
+      drawKey(xPos, yPos, highlight, fill)
       xPos = xPos + 4
     else
       yPos = 41
       xPos = xPos - 2
-      screen.rect(xPos, yPos, 2, 2)
-      screen.stroke()
+      drawKey(xPos, yPos, highlight, fill)
       xPos = xPos + 2
     end
   end
@@ -155,7 +192,7 @@ end
 
 function handlePresetKey(n,z)
   if (n == 3) then
-    parsePreset(file_names[active_preset_index])
+    load_preset(file_names[active_preset_index])
   end
 end
 
