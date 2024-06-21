@@ -8,9 +8,16 @@ key_map = {}
 low_note = 36
 octaves = 4
 
+note_map_to_display = nil
+
+-- 2D array: note to notes mapping
 note_to_notes = {}
-active_notes = {}
+mapping_names = {}
+
+-- which notes are pressed
 pressed_notes = {}
+-- which notes are playing
+active_notes = {}
 
 in_midi = midi.connect()
 in_midi_ch = 1
@@ -23,17 +30,28 @@ in_midi.event = function(data)
   if message.type == "note_on" then
     pressed_notes[message.note] = message.note
     diff_output()
+    updateMapNameState(message.note, true)
   elseif message.type == "note_off" then
     pressed_notes[message.note] = nil
     diff_output()
+    updateMapNameState(message.note, false)
   end
 
   redraw()
 end
 
+function updateMapNameState(note, on)
+  if on == false and note == note_map_to_display then
+    note_map_to_display = nil
+  elseif on ==true then
+    note_map_to_display = note
+  end
+end
+
 function diff_output()
   local next_notes = {}
 
+  -- determine which notes need to be playing
   for _, pressed_note in pairs(pressed_notes) do
     if note_to_notes[pressed_note] then
       for _, mapped_note in pairs(note_to_notes[pressed_note]) do
@@ -44,12 +62,14 @@ function diff_output()
     end
   end
 
+  -- send new notes
   for _, next_note in pairs(next_notes) do
     if not active_notes[next_note] then
       out_midi:note_on(next_note)
     end
   end
 
+  -- stop old notes
   for _, active_note in pairs(active_notes) do
     if not next_notes[active_note] then
       out_midi:note_off(active_note)
@@ -86,23 +106,31 @@ function load_preset(preset)
       -- look for incoming note
       i, j = string.find(line, 'note="%d+"')
       if i and j then
-        match = string.sub(line,i,j)
-        i, j = string.find(match, '%d+')
-        inNote = string.sub(match,i,j)
+        match = string.sub(line,i+6,j-1)
+        print(match)
+        inNote = match
       end
 
       -- look for mapped notes
       i, j = string.find(line, 'notes="[0-9;]+"')
       if i and j then
         outNotes = {}
-        match = string.sub(line,i,j)
-        i, j = string.find(match, '[0-9;]+')
-        match = string.sub(match,i,j)
+        match = string.sub(line,i+7,j-1)
+        print(match)
         for token in string.gmatch(match, "[0-9]+") do
           table.insert(outNotes, tonumber(token))
         end
         note_to_notes[tonumber(inNote)] = outNotes
       end
+
+      -- stash mapping name
+      i, j = string.find(line, 'name="[^"]+"')
+      if i and j then
+        match = string.sub(line,i+6,j-1)
+        print(match)
+        mapping_names[tonumber(inNote)] = match
+      end
+
     end
   end
 
@@ -168,7 +196,7 @@ function drawKey(xPos, yPos, highlighted, filled)
   end
 end
 
-function drayKeyboard(yPos, notesToHighlight, notesToFill)
+function drawKeyboard(yPos, notesToHighlight, notesToFill)
   local sorted_keys = tab.sort(key_map)
 
   local xPos = 10
@@ -192,8 +220,19 @@ end
 function drawPreset()
   generate_key_map()
 
-  drayKeyboard(45, pressed_notes, note_to_notes)
-  drayKeyboard(55, active_notes, {})
+  local mapping_to_display = ""
+  if note_map_to_display then
+    mapping_to_display = key_map[note_map_to_display]
+    if mapping_names[note_map_to_display] then
+      mapping_to_display = mapping_to_display..": "..mapping_names[note_map_to_display]
+    end
+    screen.level(2)
+    screen.move(1, 64)
+    screen.text(mapping_to_display)
+  end
+
+  drawKeyboard(44, pressed_notes, note_to_notes)
+  drawKeyboard(54, active_notes, {})
 end
 
 function redraw()
