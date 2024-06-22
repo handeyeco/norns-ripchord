@@ -1,6 +1,6 @@
 -- ripchord
 
-page = 0
+page = 1
 active_preset_index = 1
 file_names = {}
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
@@ -33,7 +33,10 @@ out_midi_index = 1
 out_midi = midi.connect(out_midi_index)
 out_midi_channel = 1
 
+keyboard_offset = -57
+
 function init()
+  generate_key_map()
   setupMidiCallback()
   get_presets()
 end
@@ -42,7 +45,6 @@ function setupMidiCallback()
   midi.cleanup()
   in_midi.event = function(data)
     local message = midi.to_msg(data)
-    tab.print(message)
   
     if (message.ch == in_midi_channel) then
       if message.type == "note_on" then
@@ -72,9 +74,6 @@ function stop_all_notes()
 end
 
 function drawMidiOptions()
-  tab.print(midi.devices[1])
-  tab.print(midi.devices[2])
-  print("====")
   drawLine(0, "in:", in_midi_index.." "..midi.devices[in_midi_index].name, active_midi_index==1)
   drawLine(10, "in ch:", in_midi_channel, active_midi_index==2)
   drawLine(20, "out:", out_midi_index .." "..midi.devices[out_midi_index].name, active_midi_index==3)
@@ -123,14 +122,13 @@ function diff_output()
 end
 
 function generate_key_map()
-  for i=1,octaves do
-    local baseNoteNumber = ((i - 1) * 12) + low_note
-    local baseOctaveNumber = i + 1
-    for j, v in pairs(notes) do
-      local noteNumber = baseNoteNumber + (j - 1)
-      local note = v..baseOctaveNumber
-      key_map[noteNumber] = note
+  local octave = -2
+  for i=0,127 do
+    if (i % 12 == 0) then
+      octave = octave + 1
     end
+    local name = notes[(i % 12)+1]
+    key_map[i] = name..octave
   end
 end
 
@@ -215,6 +213,11 @@ function drawPresets()
 end
 
 function drawKey(xPos, yPos, highlighted, filled)
+  -- don't draw outside of set bounds
+  if xPos < 8 or xPos > 118 then
+    return
+  end
+
   if highlighted then
     screen.level(15)
   else
@@ -233,7 +236,7 @@ end
 function drawKeyboard(yPos, notesToHighlight, notesToFill)
   local sorted_keys = tab.sort(key_map)
 
-  local xPos = 10
+  local xPos = 10 + keyboard_offset
 
   for _, note in pairs(sorted_keys) do
     local name = key_map[note]
@@ -242,6 +245,17 @@ function drawKeyboard(yPos, notesToHighlight, notesToFill)
 
     if string.len(name) == 2 then
       drawKey(xPos, yPos, highlight, fill)
+
+      -- mark middle c
+      if note == 60 then
+        screen.level(0)
+        screen.pixel(xPos - 1, yPos + 1)
+        screen.pixel(xPos + 1, yPos + 1)
+        screen.pixel(xPos - 1, yPos - 1)
+        screen.pixel(xPos + 1, yPos - 1)
+        screen.fill()
+      end
+
       xPos = xPos + 4
     else
       xPos = xPos - 2
@@ -252,7 +266,6 @@ function drawKeyboard(yPos, notesToHighlight, notesToFill)
 end
 
 function drawRipchord()
-  generate_key_map()
   screen.level(2)
 
   local preset_text = "preset: "
@@ -296,14 +309,14 @@ end
 
 function get_presets()
   local cb = function(text)
-      -- Get a list of filenames
-      for line in string.gmatch(text, "/[%w%s_-]+.rpc") do
-          name = string.sub(line, 2, -5)
-          table.insert(file_names, name)
-      end
-      table.sort(file_names)
+    -- Get a list of filenames
+    for line in string.gmatch(text, "/[%w%s_-]+.rpc") do
+        name = string.sub(line, 2, -5)
+        table.insert(file_names, name)
+    end
+    table.sort(file_names)
 
-      redraw()
+    redraw()
   end
 
   norns.system_cmd('find '.._path.data..'ripchord/presets -name *.rpc', cb)
@@ -316,12 +329,15 @@ function handlePresetsEnc(n,d)
 end
 
 function handleRipchordEnc(n,d)
-  if (n == 3) then
+  if (n == 2) then
     local prev_transpose_output = transpose_output
     transpose_output = util.clamp(transpose_output + d, -24, 24)
     if prev_transpose_output ~= transpose_output then
       diff_output()
     end
+  elseif (n == 3) then
+    keyboard_offset = util.clamp(keyboard_offset + d, -200, 50)
+    redraw()
   end
 end
 
