@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ripchord>
+  <preset>
+    <input note="35">
+      <chord name="1 I" notes="35;39;42"/>
+    </input>
+    <input note="37">
+      <chord name="1 ii" notes="37;40;44"/>
+    </input>
+    <input note="39">
+      <chord name="1 iii" notes="39;42;46"/>
+    </input>
+    <input note="40">
+      <chord name="1 IV" notes="40;44;47"/>
+    </input>
+    <input note="42">
+      <chord name="1 V" notes="42;46;49"/>
+    </input>
+    <input note="44">
+      <chord name="1 vi" notes="44;47;51"/>
+    </input>
+    <input note="46">
+      <chord name="1 vii" notes="46;49;52"/>
+    </input>
+    <input note="47">
+      <chord name="2 I" notes="47;51;54"/>
+    </input>
+    <input note="49">
+      <chord name="2 ii" notes="49;52;56"/>
+    </input>
+    <input note="51">
+      <chord name="2 iii" notes="51;54;58"/>
+    </input>
+    <input note="52">
+      <chord name="2 IV" notes="52;56;59"/>
+    </input>
+    <input note="54">
+      <chord name="2 V" notes="54;58;61"/>
+    </input>
+    <input note="56">
+      <chord name="2 vi" notes="56;59;63"/>
+    </input>
+    <input note="58">
+      <chord name="2 vii" notes="58;61;64"/>
+    </input>
+    <input note="59">
+      <chord name="3 I" notes="59;63;66"/>
+    </input>
+    <input note="61">
+      <chord name="3 ii" notes="61;64;68"/>
+    </input>
+    <input note="63">
+      <chord name="3 iii" notes="63;66;70"/>
+    </input>
+    <input note="64">
+      <chord name="3 IV" notes="64;68;71"/>
+    </input>
+    <input note="66">
+      <chord name="3 V" notes="66;70;73"/>
+    </input>
+    <input note="68">
+      <chord name="3 vi" notes="68;71;75"/>
+    </input>
+    <input note="70">
+      <chord name="3 vii" notes="70;73;76"/>
+    </input>
+    <input note="71">
+      <chord name="4 I" notes="71;75;78"/>
+    </input>
+    <input note="73">
+      <chord name="4 ii" notes="73;76;80"/>
+    </input>
+    <input note="75">
+      <chord name="4 iii" notes="75;78;82"/>
+    </input>
+    <input note="76">
+      <chord name="4 IV" notes="76;80;83"/>
+    </input>
+    <input note="78">
+      <chord name="4 V" notes="78;82;85"/>
+    </input>
+    <input note="80">
+      <chord name="4 vi" notes="80;83;87"/>
+    </input>
+    <input note="82">
+      <chord name="4 vii" notes="82;85;88"/>
+    </input>
+    <input note="83">
+      <chord name="5 I" notes="83;87;90"/>
+    </input>
+    <input note="85">
+      <chord name="5 ii" notes="85;88;92"/>
+    </input>
+    <input note="87">
+      <chord name="5 iii" notes="87;90;94"/>
+    </input>
+    <input note="88">
+      <chord name="5 IV" notes="88;92;95"/>
+    </input>
+    <input note="90">
+      <chord name="5 V" notes="90;94;97"/>
+    </input>
+    <input note="92">
+      <chord name="5 vi" notes="92;95;99"/>
+    </input>
+    <input note="94">
+      <chord name="5 vii" notes="94;97;100"/>
+    </input>
+    <input note="95">
+      <chord name="6 I" notes="95;99;102"/>
+    </input>
+    <input note="97">
+      <chord name="6 ii" notes="97;100;104"/>
+    </input>
+    <input note="99">
+      <chord name="6 iii" notes="99;102;106"/>
+    </input>
+    <input note="100">
+      <chord name="6 IV" notes="100;104;107"/>
+    </input>
+    <input note="102">
+      <chord name="6 V" notes="102;106;109"/>
+    </input>
+    <input note="104">
+      <chord name="6 vi" notes="104;107;111"/>
+    </input>
+    <input note="106">
+      <chord name="6 vii" notes="106;109;112"/>
+    </input>
+  </preset>
+</ripchord>
