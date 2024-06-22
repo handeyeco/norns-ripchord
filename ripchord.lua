@@ -494,6 +494,9 @@ function save(name)
   local file = io.open(path, "w")
   file:write(stringify_preset())
   file:close()
+  selected_preset_name = name
+  page = 0
+  redraw()
 end
 
 function handleMidiKey(n,z)
