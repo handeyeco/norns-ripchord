@@ -3,6 +3,8 @@
 fileselect = require('fileselect')
 textentry = require('textentry')
 
+user_presets = _path.data.."ripchord/presets/user"
+
 page = 0
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 key_map = {}
@@ -43,6 +45,7 @@ map_key_output = {}
 dirty = false
 
 function init()
+  os.execute("mkdir -p "..user_presets)
   generate_key_map()
   setupMidiCallback()
 end
@@ -306,16 +309,15 @@ function drawMapper()
   if map_key_input then
     input_text = input_text..": "..key_map[map_key_input]
   end
+  screen.move(1, 10)
+  screen.text(input_text)
 
   if map_key_step == "input" then
-    screen.move(64, 20)
-    screen.text_center(input_text)
-
     local highlight = {}
     if map_key_input then
       highlight[map_key_input] = map_key_input
     end
-    drawKeyboard(40, highlight, note_to_notes)
+    drawKeyboard(44, highlight, note_to_notes)
 
     screen.move(2, 62)
     screen.text("cancel: k2")
@@ -325,17 +327,14 @@ function drawMapper()
       screen.text_right("next: k3")
     end
   elseif map_key_step == "output" then
-    screen.move(64, 15)
-    screen.text_center(input_text)
-
     local output_count = 0
     for _ in pairs(map_key_output) do
       output_count = output_count + 1
     end
     local text = "output notes: "..output_count
-    screen.move(64, 27)
-    screen.text_center(text)
-    drawKeyboard(40, map_key_output, {})
+    screen.move(1, 20)
+    screen.text(text)
+    drawKeyboard(44, map_key_output, {})
 
     screen.move(2, 62)
     screen.text("back: k2")
@@ -399,8 +398,14 @@ function handleMappingKey(n, z)
       redraw()
     elseif map_key_step == "output" then
       function cb(name)
+        if (name == nil) then
+          map_key_step = "output"
+          redraw()
+          return
+        end
+
         -- finish
-        dirty = false
+        dirty = true
         note_to_notes[map_key_input] = map_key_output
         mapping_names[map_key_input] = name
         map_key_step = nil
@@ -485,15 +490,16 @@ function stringify_preset()
 end
 
 function save(name)
-  print(name)
-  print(stringify_preset())
+  if (name == nil or name == "") then
+    return
+  end
 
-  local dir = _path.data.."ripchord/presets/user"
-  os.execute("mkdir -p "..dir)
-  local path = dir.."/"..name..".rpc"
+  os.execute("mkdir -p "..user_presets)
+  local path = user_presets.."/"..name..".rpc"
   local file = io.open(path, "w")
   file:write(stringify_preset())
   file:close()
+  dirty = false
   selected_preset_name = name
   page = 0
   redraw()
