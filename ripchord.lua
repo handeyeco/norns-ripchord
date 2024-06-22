@@ -27,7 +27,6 @@ active_notes = {}
 transpose_output = 0
 
 -- stuff for the MIDI menu
--- that's not working
 active_midi_index = 1
 in_midi_index = 1
 in_midi = midi.connect(in_midi_index)
@@ -36,8 +35,10 @@ out_midi_index = 1
 out_midi = midi.connect(out_midi_index)
 out_midi_channel = 1
 
+-- used to move the keyboard left/right
 keyboard_offset = -57
 
+-- state for making a new key mapping
 -- nil -> input -> output
 map_key_step = nil
 map_key_input = nil
@@ -105,7 +106,7 @@ end
 function updateMapNameState(note, on)
   if on == false and note == note_map_to_display then
     note_map_to_display = nil
-  elseif on == true and mapping_names[note] then
+  elseif on == true then
     note_map_to_display = note
   end
 end
@@ -295,8 +296,9 @@ function drawRipchord()
 
   if note_map_to_display then
     local mapping_to_display = key_map[note_map_to_display]
-    if mapping_names[note_map_to_display] then
-      mapping_to_display = mapping_to_display..": "..mapping_names[note_map_to_display]
+    local mapping_name_to_display = mapping_names[note_map_to_display]
+    if mapping_name_to_display and mapping_name_to_display ~= "" then
+      mapping_to_display = mapping_to_display..": "..mapping_name_to_display
     end
     screen.move(1, 64)
     screen.level(2)
