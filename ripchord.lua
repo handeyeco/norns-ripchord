@@ -1,8 +1,8 @@
 -- ripchord
 
-page = 1
-active_preset_index = 1
-file_names = {}
+fileselect = require('fileselect')
+
+page = 0
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 key_map = {}
 low_note = 36
@@ -38,7 +38,6 @@ keyboard_offset = -57
 function init()
   generate_key_map()
   setupMidiCallback()
-  get_presets()
 end
 
 function setupMidiCallback()
@@ -132,9 +131,9 @@ function generate_key_map()
   end
 end
 
-function load_preset(preset)
-  selected_preset_name = preset
-  local path = _path.data..'ripchord/presets/'..preset..".rpc"
+function load_preset(path)
+  if not path or path == "cancel" then return end
+
   local f=io.open(path,"r")
   note_to_notes = {}
   local inNote = nil
@@ -173,7 +172,8 @@ function load_preset(preset)
     end
   end
 
-  page = 1
+  local split_at = string.match(path, "^.*()/")
+  selected_preset_name = string.sub(path, split_at + 1, #path - 4)
   redraw()
 end
 
@@ -192,24 +192,6 @@ function drawLine(yPos, leftText, rightText, active)
   screen.text(leftText)
   screen.move(128-1, textPos)
   screen.text_right(rightText)
-end
-
-function drawPresets()
-  for i=1, #file_names do
-    local file = file_names[i]
-    local yPos = 0
-    if active_preset_index < 4 then
-      yPos = (i - 1) * 10
-    else
-      yPos = ((i - active_preset_index + 3) * 10)
-    end
-    drawLine(
-      yPos,
-      file,
-      "",
-      active_preset_index == i
-    )
-  end
 end
 
 function drawKey(xPos, yPos, highlighted, filled)
@@ -298,34 +280,11 @@ function redraw()
   screen.clear()
   screen.fill()
   if page == 0 then
-    drawPresets()
-  elseif page == 1 then
     drawRipchord()
-  elseif page == 2 then
+  elseif page == 1 then
     drawMidiOptions()
   end
   screen.update()
-end
-
-function get_presets()
-  local cb = function(text)
-    -- Get a list of filenames
-    for line in string.gmatch(text, "/[%w%s_-]+.rpc") do
-        name = string.sub(line, 2, -5)
-        table.insert(file_names, name)
-    end
-    table.sort(file_names)
-
-    redraw()
-  end
-
-  norns.system_cmd('find '.._path.data..'ripchord/presets -name *.rpc', cb)
-end
-
-function handlePresetsEnc(n,d)
-  if (n == 2) then
-    active_preset_index = util.clamp(active_preset_index + d, 1, #file_names)
-  end
 end
 
 function handleRipchordEnc(n,d)
@@ -341,9 +300,11 @@ function handleRipchordEnc(n,d)
   end
 end
 
-function handlePresetsKey(n,z)
-  if (n == 3) then
-    load_preset(file_names[active_preset_index])
+function handleRipchordKey(n,z)
+  if (n == 2) then
+    fileselect.enter(_path.data..'ripchord/presets', load_preset)
+  elseif (n == 3) then
+    print("doesn't do anything")
   end
 end
 
@@ -370,12 +331,10 @@ end
 
 function enc(n,d)
   if (n == 1) then
-    page = util.clamp(page + d, 0, 2)
+    page = util.clamp(page + d, 0, 1)
   elseif (page == 0) then
-    handlePresetsEnc(n,d)
-  elseif (page == 1) then
     handleRipchordEnc(n,d)
-  elseif (page == 2) then
+  elseif (page == 1) then
     handleMidiEncoder(n,d)
   end
   redraw()
@@ -384,8 +343,8 @@ end
 function key(n,z)
   if (z == 1) then
     if (page == 0) then
-      handlePresetsKey(n,z)
+      handleRipchordKey(n,z)
+      -- can't redraw here due to fileselect
     end
   end
-  redraw()
 end
