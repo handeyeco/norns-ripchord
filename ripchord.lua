@@ -35,6 +35,12 @@ out_midi_channel = 1
 
 keyboard_offset = -57
 
+-- nil -> input -> output
+map_key_step = nil
+map_key_input = nil
+map_key_output = {}
+dirty = false
+
 function init()
   generate_key_map()
   setupMidiCallback()
@@ -47,9 +53,21 @@ function setupMidiCallback()
   
     if (message.ch == in_midi_channel) then
       if message.type == "note_on" then
-        pressed_notes[message.note] = message.note
-        diff_output()
-        updateMapNameState(message.note, true)
+        if map_key_step == nil then
+          pressed_notes[message.note] = message.note
+          diff_output()
+          updateMapNameState(message.note, true)
+        elseif map_key_step == "input" then
+          map_key_input = message.note
+          redraw()
+        elseif map_key_step == "output" then
+          if map_key_output[message.note] then
+            map_key_output[message.note] = nil
+          else
+            map_key_output[message.note] = message.note
+          end
+          redraw()
+        end
       elseif message.type == "note_off" then
         pressed_notes[message.note] = nil
         diff_output()
@@ -251,6 +269,10 @@ function drawRipchord()
   screen.level(2)
 
   local preset_text = "preset: "
+  if dirty then
+    preset_text = preset_text.."! "
+  end
+
   if selected_preset_name then
     preset_text = preset_text..selected_preset_name
   else
@@ -276,10 +298,58 @@ function drawRipchord()
   end
 end
 
+function drawMapper()
+  local input_text = "input note"
+  if map_key_input then
+    input_text = input_text..": "..key_map[map_key_input]
+  end
+
+  if map_key_step == "input" then
+    screen.move(64, 20)
+    screen.text_center(input_text)
+
+    local highlight = {}
+    if map_key_input then
+      highlight[map_key_input] = map_key_input
+    end
+    drawKeyboard(40, highlight, note_to_notes)
+
+    screen.move(2, 62)
+    screen.text("cancel: k2")
+
+    if map_key_input ~= nil then
+      screen.move(126, 62)
+      screen.text_right("next: k3")
+    end
+  elseif map_key_step == "output" then
+    screen.move(64, 15)
+    screen.text_center(input_text)
+
+    local output_count = 0
+    for _ in pairs(map_key_output) do
+      output_count = output_count + 1
+    end
+    local text = "output notes: "..output_count
+    screen.move(64, 27)
+    screen.text_center(text)
+    drawKeyboard(40, map_key_output, {})
+
+    screen.move(2, 62)
+    screen.text("back: k2")
+
+    if output_count > 0 then
+      screen.move(126, 62)
+      screen.text_right("finish: k3")
+    end
+  end
+end
+
 function redraw()
   screen.clear()
   screen.fill()
-  if page == 0 then
+  if map_key_step ~= nil then
+    drawMapper()
+  elseif page == 0 then
     drawRipchord()
   elseif page == 1 then
     drawMidiOptions()
@@ -300,11 +370,49 @@ function handleRipchordEnc(n,d)
   end
 end
 
+function handleMappingKey(n, z)
+  if n == 2 then
+    if map_key_step == "input" then
+      -- cancel
+      map_key_step = nil
+      map_key_input = nil
+      map_key_output = {}
+    elseif map_key_step == "output" then
+      -- back
+      map_key_step = "input"
+    end
+  elseif n == 3 then
+    if map_key_step == "input" then
+      -- next
+      map_key_step = "output"
+      -- if a mapping exists for that key
+      -- load it
+      if note_to_notes[map_key_input] then
+        for _, v in pairs(note_to_notes[map_key_input]) do
+          map_key_output[v] = v
+        end
+      end
+    elseif map_key_step == "output" then
+      -- finish
+      dirty = true
+      note_to_notes[map_key_input] = map_key_output
+      map_key_step = nil
+      map_key_input = nil
+      map_key_output = {}
+    end
+  end
+
+  redraw()
+end
+
 function handleRipchordKey(n,z)
-  if (n == 2) then
+  if map_key_step ~= nil then
+    handleMappingKey(n, z)
+  elseif n == 2 then
     fileselect.enter(_path.data..'ripchord/presets', load_preset)
-  elseif (n == 3) then
-    print("doesn't do anything")
+  elseif n == 3 then
+    map_key_step = "input"
+    redraw()
   end
 end
 
