@@ -1,6 +1,7 @@
 -- ripchord
 
 fileselect = require('fileselect')
+textentry = require('textentry')
 
 page = 0
 notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
@@ -95,6 +96,7 @@ function drawMidiOptions()
   drawLine(10, "in ch:", in_midi_channel, active_midi_index==2)
   drawLine(20, "out:", out_midi_index .." "..midi.devices[out_midi_index].name, active_midi_index==3)
   drawLine(30, "out ch:", out_midi_channel, active_midi_index==4)
+  drawLine(40, "save preset", "", active_midi_index==5)
 end
 
 function updateMapNameState(note, on)
@@ -175,7 +177,8 @@ function load_preset(path)
         outNotes = {}
         match = string.sub(line,i+7,j-1)
         for token in string.gmatch(match, "[0-9]+") do
-          table.insert(outNotes, tonumber(token))
+          note = tonumber(token)
+          outNotes[note] = note
         end
         note_to_notes[tonumber(inNote)] = outNotes
       end
@@ -394,7 +397,7 @@ function handleMappingKey(n, z)
       end
     elseif map_key_step == "output" then
       -- finish
-      dirty = true
+      dirty = false
       note_to_notes[map_key_input] = map_key_output
       map_key_step = nil
       map_key_input = nil
@@ -418,7 +421,7 @@ end
 
 function handleMidiEncoder(n,d)
   if n == 2 then
-    active_midi_index = util.clamp(active_midi_index + d, 1, 4)
+    active_midi_index = util.clamp(active_midi_index + d, 1, 5)
   elseif n == 3 then
     if (active_midi_index == 1) then
       in_midi_index = util.clamp(in_midi_index + d, 1, #midi.devices)
@@ -448,11 +451,62 @@ function enc(n,d)
   redraw()
 end
 
+function stringify_preset()
+  local start_str = '<?xml version="1.0" encoding="UTF-8"?>\n<ripchord>\n  <preset>\n'
+  local end_str = '  </preset>\n</ripchord>'
+
+  local output = start_str
+  for note, map in pairs(note_to_notes) do
+    output = output..'    <input note="'..note..'">\n      <chord name="'
+    if mapping_names[note] then
+      output = output..mapping_names[note]
+    end
+    output = output..'" notes="'
+
+    -- bunch of BS to sort the notes
+    local arr = {}
+    for _, k in pairs(map) do
+      table.insert(arr, k)
+    end
+    table.sort(arr, function(a, b) return a < b end)
+    tab.print(arr)
+    local merged = table.concat(arr, ";")
+
+    output = output..merged..'"/>\n    </input>\n'
+  end
+
+  return output..end_str
+end
+
+function save(name)
+  print(name)
+  print(stringify_preset())
+
+  local dir = _path.data.."ripchord/presets/user"
+  os.execute("mkdir -p "..dir)
+  local path = dir.."/"..name..".rpc"
+  local file = io.open(path, "w")
+  file:write(stringify_preset())
+  file:close()
+end
+
+function handleMidiKey(n,z)
+  if n == 3 and active_midi_index == 5 then
+    local default = ""
+    if selected_preset_name then
+      default = selected_preset_name
+    end
+    textentry.enter(save, default, "save to presets/user")
+  end
+end
+
 function key(n,z)
   if (z == 1) then
-    if (page == 0) then
+    if page == 0 then
       handleRipchordKey(n,z)
       -- can't redraw here due to fileselect
+    elseif page == 1 then
+      handleMidiKey(n,z)
     end
   end
 end
