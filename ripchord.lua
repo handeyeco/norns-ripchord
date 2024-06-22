@@ -342,7 +342,7 @@ function drawMapper()
 
     if output_count > 0 then
       screen.move(126, 62)
-      screen.text_right("finish: k3")
+      screen.text_right("next: k3")
     end
   end
 end
@@ -384,6 +384,7 @@ function handleMappingKey(n, z)
       -- back
       map_key_step = "input"
     end
+    redraw()
   elseif n == 3 then
     if map_key_step == "input" then
       -- next
@@ -395,17 +396,22 @@ function handleMappingKey(n, z)
           map_key_output[v] = v
         end
       end
+      redraw()
     elseif map_key_step == "output" then
-      -- finish
-      dirty = false
-      note_to_notes[map_key_input] = map_key_output
-      map_key_step = nil
-      map_key_input = nil
-      map_key_output = {}
+      function cb(name)
+        -- finish
+        dirty = false
+        note_to_notes[map_key_input] = map_key_output
+        mapping_names[map_key_input] = name
+        map_key_step = nil
+        map_key_input = nil
+        map_key_output = {}
+        redraw()
+      end
+
+      textentry.enter(cb, "", "mapping name")
     end
   end
-
-  redraw()
 end
 
 function handleRipchordKey(n,z)
@@ -441,7 +447,7 @@ function handleMidiEncoder(n,d)
 end
 
 function enc(n,d)
-  if (n == 1) then
+  if n == 1 and map_key_step == nil then
     page = util.clamp(page + d, 0, 1)
   elseif (page == 0) then
     handleRipchordEnc(n,d)
