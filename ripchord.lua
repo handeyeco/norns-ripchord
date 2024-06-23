@@ -1,4 +1,19 @@
--- ripchord
+-- norns ripchord
+--
+-- by handeyeco
+--
+-- e1: change screens
+-- e2: transpose outgoing
+--     notes
+-- e2: move onscreen
+--     keyboard
+-- k2: load preset
+-- k3: create new key mapping
+--
+-- https://github.com/handeyeco
+--        /norns-ripchord
+-- 
+--     for more info
 
 fileselect = require('fileselect')
 textentry = require('textentry')
