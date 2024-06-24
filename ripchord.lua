@@ -19,8 +19,9 @@
 fileselect = require('fileselect')
 textentry = require('textentry')
 
--- path for saving user presets
-user_preset_dir = _path.data.."ripchord/presets/user"
+-- paths for presets
+preset_dir = _path.data.."ripchord/presets"
+user_preset_dir = preset_dir.."/user"
 
 -- which UI page to show
 -- 0 == ripchord page, 1 == settings page
@@ -314,6 +315,29 @@ function load_preset(path)
   redraw()
 end
 
+-- load a random preset from "ripchord/presets" and subdirectories
+-- TODO give feedback if user doesn't have any presets
+function load_random_preset()
+  -- return to main page
+  page = 0
+
+  -- find all presets
+  local all_presets = {}
+  local pfile = io.popen('find "'..preset_dir..'" -name *.rpc')
+  for filename in pfile:lines() do
+    table.insert(all_presets, filename)
+  end
+  pfile:close()
+
+  -- load a random one, if there are any
+  if #all_presets > 0 then
+    local random_preset = all_presets[math.random(#all_presets)]
+    load_preset(random_preset)
+  else
+    redraw()
+  end
+end
+
 -- convert in-memory mapping to a Ripchord preset (.rpc) which is XML
 function stringify_preset()
   local start_str = '<?xml version="1.0" encoding="UTF-8"?>\n<ripchord>\n  <preset>\n'
@@ -471,6 +495,7 @@ function draw_settings_page()
   draw_line(20, "out:", out_midi_index .." "..midi.devices[out_midi_index].name, active_settings_index==3)
   draw_line(30, "out ch:", out_midi_channel, active_settings_index==4)
   draw_line(40, "save preset", "", active_settings_index==5)
+  draw_line(50, "load random preset", "", active_settings_index==6)
 end
 
 -- draw a selectable line of text
@@ -621,7 +646,7 @@ function handle_ripchord_key(n,z)
 
   -- load a preset
   elseif n == 2 then
-    fileselect.enter(_path.data..'ripchord/presets', load_preset)
+    fileselect.enter(preset_dir, load_preset)
 
   -- trigger mapper UI
   elseif n == 3 then
@@ -632,13 +657,18 @@ end
 
 -- callback for keys on the setting page
 function handle_settings_key(n,z)
-  -- trigger preset save flow when "save" option is selected
-  if n == 3 and active_settings_index == 5 then
-    local default = ""
-    if selected_preset_name then
-      default = selected_preset_name
+  if n == 3 then
+    if active_settings_index == 5 then
+      -- trigger preset save flow when "save" option is selected
+      local default = ""
+      if selected_preset_name then
+        default = selected_preset_name
+      end
+      textentry.enter(save_preset, default, "save to presets/user")
+    elseif active_settings_index == 6 then
+      -- load a random preset
+      load_random_preset()
     end
-    textentry.enter(save_preset, default, "save to presets/user")
   end
 end
 
@@ -661,7 +691,7 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 5)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 6)
   elseif n == 3 then
     if (active_settings_index == 1) then
       -- MIDI in device
