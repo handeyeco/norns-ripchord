@@ -95,6 +95,8 @@ function init()
   params:add_number("midi_out_channel", "midi out channel", 1, 16, 1)
   params:set_action("midi_out_channel", function() setup_midi_callback() end)
 
+  params:add_binary("setting_legato", "legato", "toggle", 0)
+
   setup_midi_callback()
 end
 
@@ -174,8 +176,33 @@ end
 -- compare the current state of notes being played to a new state
 -- if there are new notes, send those
 -- if there are active notes that are now inactive, turn those off
-function diff_output()
+function diff_output(newly_pressed)
   local next_notes = {}
+
+  -- handle staccato (legato off): when they play a note that's already
+  -- playing, play it again
+  local legato = params:get("setting_legato")
+  local staccato_notes = {}
+  if newly_pressed and legato == 0 then
+    if note_to_notes[newly_pressed] then
+      for _, mapped_note in pairs(note_to_notes[newly_pressed]) do
+        local transposed = mapped_note + transpose_output
+        staccato_notes[transposed] = transposed
+      end
+    else
+      local transposed = newly_pressed + transpose_output
+      staccato_notes[transposed] = transposed
+    end
+
+    for _, staccato_note in pairs(staccato_notes) do
+      if active_notes[staccato_note] then
+        -- TODO: this seems dangerous, but I don't know why
+        -- trying to force the note to replay
+        active_notes[staccato_note] = nil
+        out_midi:note_off(staccato_note, 100, params:get("midi_out_channel"))
+      end
+    end
+  end
 
   -- determine which notes need to be playing
   for _, pressed_note in pairs(pressed_notes) do
@@ -266,7 +293,7 @@ function setup_midi_callback()
         -- normal use
         if map_key_step == nil then
           pressed_notes[message.note] = message.note
-          diff_output()
+          diff_output(message.note)
           update_map_name_state(message.note, true)
 
         -- selecting a trigger note in a new mapping
@@ -541,16 +568,20 @@ function draw_settings_page()
     yOffset = -10 * (active_settings_index - 1) + (10 * 3)
   end
 
-  in_midi_index = params:get("midi_in_device")
+  local in_midi_index = params:get("midi_in_device")
   draw_line(yOffset + 0, "in:", in_midi_index.." "..midi_devices[in_midi_index], active_settings_index==1)
   draw_line(yOffset + 10, "in ch:", params:get("midi_in_channel"), active_settings_index==2)
 
-  out_midi_index = params:get("midi_out_device")
+  local out_midi_index = params:get("midi_out_device")
   draw_line(yOffset + 20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
   draw_line(yOffset + 30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
+
+  local legato_text
+  if params:get("setting_legato") == 1 then legato_text = "true" else legato_text = "false" end
+  draw_line(yOffset + 40, "legato", legato_text, active_settings_index==5)
   
-  draw_line(yOffset + 40, "save preset", "", active_settings_index==5)
-  draw_line(yOffset + 50, "load random preset", "", active_settings_index==6)
+  draw_line(yOffset + 50, "save preset", "", active_settings_index==6)
+  draw_line(yOffset + 60, "load random preset", "", active_settings_index==7)
 end
 
 -- draw a selectable line of text
@@ -713,14 +744,14 @@ end
 -- callback for keys on the setting page
 function handle_settings_key(n,z)
   if n == 3 then
-    if active_settings_index == 5 then
+    if active_settings_index == 6 then
       -- trigger preset save flow when "save" option is selected
       local default = ""
       if selected_preset_name then
         default = selected_preset_name
       end
       textentry.enter(save_preset, default, "save to presets/user")
-    elseif active_settings_index == 6 then
+    elseif active_settings_index == 7 then
       -- load a random preset
       load_random_preset()
     end
@@ -746,20 +777,22 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 6)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 7)
   elseif n == 3 then
-    if (active_settings_index == 1) then
+    if active_settings_index == 1 then
       -- MIDI in device
       params:set("midi_in_device", params:get("midi_in_device") + d)
-    elseif (active_settings_index == 2) then
+    elseif active_settings_index == 2 then
       -- MIDI in channel
       params:set("midi_in_channel", params:get("midi_in_channel") + d)
-    elseif (active_settings_index == 3) then
+    elseif active_settings_index == 3 then
       -- MIDI out device
       params:set("midi_out_device", params:get("midi_out_device") + d)
-    elseif (active_settings_index == 4) then
+    elseif active_settings_index == 4 then
       -- MIDI out channel
       params:set("midi_out_channel", params:get("midi_out_channel") + d)
+    elseif active_settings_index == 5 then
+      params:set("setting_legato", params:get("setting_legato") + d)
     end
   end
 end
