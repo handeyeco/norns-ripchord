@@ -15,7 +15,7 @@
 -- https://github.com
 --        /handeyeco
 --        /norns-ripchord
-
+UI = require("ui")
 fileselect = require('fileselect')
 textentry = require('textentry')
 
@@ -533,16 +533,24 @@ end
 
 -- settings page UI
 function draw_settings_page()
+  -- handle sticky scrolling
+  local yOffset = 0
+  if active_settings_index < 4 then
+    yOffset = 0
+  else
+    yOffset = -10 * (active_settings_index - 1) + (10 * 3)
+  end
+
   in_midi_index = params:get("midi_in_device")
-  draw_line(0, "in:", in_midi_index.." "..midi_devices[in_midi_index], active_settings_index==1)
-  draw_line(10, "in ch:", params:get("midi_in_channel"), active_settings_index==2)
+  draw_line(yOffset + 0, "in:", in_midi_index.." "..midi_devices[in_midi_index], active_settings_index==1)
+  draw_line(yOffset + 10, "in ch:", params:get("midi_in_channel"), active_settings_index==2)
 
   out_midi_index = params:get("midi_out_device")
-  draw_line(20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
-  draw_line(30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
+  draw_line(yOffset + 20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
+  draw_line(yOffset + 30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
   
-  draw_line(40, "save preset", "", active_settings_index==5)
-  draw_line(50, "load random preset", "", active_settings_index==6)
+  draw_line(yOffset + 40, "save preset", "", active_settings_index==5)
+  draw_line(yOffset + 50, "load random preset", "", active_settings_index==6)
 end
 
 -- draw a selectable line of text
