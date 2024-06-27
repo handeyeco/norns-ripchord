@@ -51,18 +51,13 @@ transpose_output = 0
 -- stuff for the settings menu
 -- which item in the setting menu is selected
 active_settings_index = 1
--- MIDI in device index
-in_midi_index = 1
+
+-- list of virtual MIDI ports
+midi_devices = {}
 -- MIDI in connection
-in_midi = midi.connect(in_midi_index)
--- MIDI in channel
-in_midi_channel = 1
--- MIDI out device index
-out_midi_index = 1
+in_midi = nil
 -- MIDI out connection
-out_midi = midi.connect(out_midi_index)
--- MIDI out channel
-out_midi_channel = 1
+out_midi = nil
 
 -- used to move the keyboard left/right (x-position offset)
 keyboard_offset = -57
@@ -86,6 +81,20 @@ dirty = false
 function init()
   os.execute("mkdir -p "..user_preset_dir)
   generate_key_map()
+  build_midi_device_list()
+
+  params:add_option("midi_in_device", "midi in device", midi_devices, 1)
+  params:set_action("midi_in_device", function() setup_midi_callback() end)
+
+  params:add_number("midi_in_channel", "midi in channel", 1, 16, 1)
+  params:set_action("midi_in_channel", function() setup_midi_callback() end)
+
+  params:add_option("midi_out_device", "midi out device", midi_devices, 1)
+  params:set_action("midi_out_device", function()  setup_midi_callback() end)
+
+  params:add_number("midi_out_channel", "midi out channel", 1, 16, 1)
+  params:set_action("midi_out_channel", function() setup_midi_callback() end)
+
   setup_midi_callback()
 end
 
@@ -132,7 +141,6 @@ end
 -- called when script unloads
 function cleanup()
   stop_all_notes()
-  midi.cleanup()
 end
 
 -- HELPERS
@@ -150,45 +158,6 @@ function generate_key_map()
     end
     local name = note_names[(i % 12) + 1]
     key_map[i] = name..octave
-  end
-end
-
--- listen for MIDI events and do things
-function setup_midi_callback()
-  midi.cleanup()
-  in_midi.event = function(data)
-    local message = midi.to_msg(data)
-  
-    if (message.ch == in_midi_channel) then
-      if message.type == "note_on" then
-        -- normal use
-        if map_key_step == nil then
-          pressed_notes[message.note] = message.note
-          diff_output()
-          update_map_name_state(message.note, true)
-
-        -- selecting a trigger note in a new mapping
-        elseif map_key_step == "input" then
-          map_key_input = message.note
-
-        -- selecting output notes in a new mapping
-        elseif map_key_step == "output" then
-          -- toggle note selected / unselected
-          if map_key_output[message.note] then
-            map_key_output[message.note] = nil
-          else
-            map_key_output[message.note] = message.note
-          end
-        end
-
-      elseif message.type == "note_off" then
-        pressed_notes[message.note] = nil
-        diff_output()
-        update_map_name_state(message.note, false)
-      end
-    end
-  
-    redraw()
   end
 end
 
@@ -224,14 +193,14 @@ function diff_output()
   -- send new notes
   for _, next_note in pairs(next_notes) do
     if not active_notes[next_note] then
-      out_midi:note_on(next_note, 100, out_midi_channel)
+      out_midi:note_on(next_note, 100, params:get("midi_out_channel"))
     end
   end
 
   -- stop old notes
   for _, active_note in pairs(active_notes) do
     if not next_notes[active_note] then
-      out_midi:note_off(active_note, 100, out_midi_channel)
+      out_midi:note_off(active_note, 100, params:get("midi_out_channel"))
     end
   end
 
@@ -241,14 +210,88 @@ end
 -- stop all notes on the MIDI output
 -- so we don't have hanging notes when changing output
 function stop_all_notes()
-  for note=21,108 do
-    for ch=1,16 do
-      out_midi:note_off(note, 100, ch)
+  if out_midi then
+    for note=21,108 do
+      for ch=1,16 do
+        out_midi:note_off(note, 100, ch)
+      end
     end
   end
   pressed_notes = {}
   active_notes = {}
   note_map_to_display = nil
+end
+
+-- MIDI
+-- MIDI
+-- MIDI
+
+function midi.add()
+  build_midi_device_list()
+end
+
+function midi.remove()
+  clock.run(function()
+    clock.sleep(0.2)
+    build_midi_device_list()
+  end)
+end
+
+function build_midi_device_list()
+  midi_devices = {}
+  for i = 1, #midi.vports do
+    local long_name = midi.vports[i].name
+    local short_name = string.len(long_name) > 15 and util.acronym(long_name) or long_name
+    table.insert(midi_devices, short_name)
+  end
+end
+
+-- listen for MIDI events and do things
+function setup_midi_callback()
+  stop_all_notes()
+
+  for i = 1, 16 do
+    midi.vports[i].event = nil
+  end
+
+  -- make new connections
+  in_midi = midi.connect(params:get("midi_in_device"))
+  out_midi = midi.connect(params:get("midi_out_device"))
+
+  in_midi.event = function(data)
+    local message = midi.to_msg(data)
+  
+    if (message.ch == params:get("midi_in_channel")) then
+      if message.type == "note_on" then
+        -- normal use
+        if map_key_step == nil then
+          pressed_notes[message.note] = message.note
+          diff_output()
+          update_map_name_state(message.note, true)
+
+        -- selecting a trigger note in a new mapping
+        elseif map_key_step == "input" then
+          map_key_input = message.note
+
+        -- selecting output notes in a new mapping
+        elseif map_key_step == "output" then
+          -- toggle note selected / unselected
+          if map_key_output[message.note] then
+            map_key_output[message.note] = nil
+          else
+            map_key_output[message.note] = message.note
+          end
+        end
+
+      elseif message.type == "note_off" then
+        pressed_notes[message.note] = nil
+        diff_output()
+        update_map_name_state(message.note, false)
+      end
+    end
+  
+    redraw()
+  end
 end
 
 -- PRESETS
@@ -490,10 +533,14 @@ end
 
 -- settings page UI
 function draw_settings_page()
-  draw_line(0, "in:", in_midi_index.." "..midi.devices[in_midi_index].name, active_settings_index==1)
-  draw_line(10, "in ch:", in_midi_channel, active_settings_index==2)
-  draw_line(20, "out:", out_midi_index .." "..midi.devices[out_midi_index].name, active_settings_index==3)
-  draw_line(30, "out ch:", out_midi_channel, active_settings_index==4)
+  in_midi_index = params:get("midi_in_device")
+  draw_line(0, "in:", in_midi_index.." "..midi_devices[in_midi_index], active_settings_index==1)
+  draw_line(10, "in ch:", params:get("midi_in_channel"), active_settings_index==2)
+
+  out_midi_index = params:get("midi_out_device")
+  draw_line(20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
+  draw_line(30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
+  
   draw_line(40, "save preset", "", active_settings_index==5)
   draw_line(50, "load random preset", "", active_settings_index==6)
 end
@@ -695,21 +742,16 @@ function handle_settings_enc(n,d)
   elseif n == 3 then
     if (active_settings_index == 1) then
       -- MIDI in device
-      in_midi_index = util.clamp(in_midi_index + d, 1, #midi.devices)
-      in_midi = midi.connect(in_midi_index)
-      setup_midi_callback()
+      params:set("midi_in_device", params:get("midi_in_device") + d)
     elseif (active_settings_index == 2) then
       -- MIDI in channel
-      in_midi_channel = util.clamp(in_midi_channel + d, 1, 16)
+      params:set("midi_in_channel", params:get("midi_in_channel") + d)
     elseif (active_settings_index == 3) then
       -- MIDI out device
-      stop_all_notes()
-      out_midi_index = util.clamp(out_midi_index + d, 1, #midi.devices)
-      out_midi = midi.connect(out_midi_index)
+      params:set("midi_out_device", params:get("midi_out_device") + d)
     elseif (active_settings_index == 4) then
       -- MIDI out channel
-      stop_all_notes()
-      out_midi_channel = util.clamp(out_midi_channel + d, 1, 16)
+      params:set("midi_out_channel", params:get("midi_out_channel") + d)
     end
   end
 end
