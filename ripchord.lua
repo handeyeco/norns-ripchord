@@ -15,7 +15,6 @@
 -- https://github.com
 --        /handeyeco
 --        /norns-ripchord
-UI = require("ui")
 fileselect = require('fileselect')
 textentry = require('textentry')
 
