@@ -17,6 +17,7 @@
 --        /norns-ripchord
 fileselect = require('fileselect')
 textentry = require('textentry')
+musicutil = require('musicutil')
 
 -- paths for presets
 preset_dir = _path.data.."ripchord/presets"
@@ -383,19 +384,23 @@ function load_preset(path)
   -- stash the preset name
   local split_at = string.match(path, "^.*()/")
   selected_preset_name = string.sub(path, split_at + 1, #path - 4)
+  
+  dirty = false
 
   redraw()
 end
 
 -- get a random preset from "ripchord/presets" and subdirectories
--- TODO give feedback if user doesn't have any presets
-function get_random_preset_path()
+-- start_dir is an optional starting point to look
+function get_random_preset_path(start_dir)
   -- return to main page
   page = 0
 
+  local dir = start_dir or preset_dir
+
   -- find all presets
   local all_presets = {}
-  local pfile = io.popen('find "'..preset_dir..'" -name *.rpc')
+  local pfile = io.popen('find "'..dir..'" -name *.rpc')
   for filename in pfile:lines() do
     table.insert(all_presets, filename)
   end
@@ -458,6 +463,84 @@ function save_preset(name)
   selected_preset_name = name
   page = 0
 
+  redraw()
+end
+
+-- generate a random mapping by smashing together
+-- existing mappings in the the presets folder
+-- TODO give feedback if user doesn't have any presets
+function generate_random_preset()
+  local generated_preset = {}
+  local next_mapping_names = {}
+  local num_presets = 8
+  local paths = {}
+  local mappings = {}
+
+  -- need this to shake up preset dirs
+  local preset_dirs = {}
+  local pfile = io.popen('find "'..preset_dir..'" -type d -maxdepth 1')
+  for filename in pfile:lines() do
+    table.insert(preset_dirs, filename)
+  end
+  pfile:close()
+
+  -- pick a palette of presets to sift through for chords
+  for i=1, num_presets do
+    -- shake up which dir to look through
+    -- since one preset pack could have thousands of presets
+    local rand_dir = preset_dirs[math.random(#preset_dirs)]
+    local path = get_random_preset_path(rand_dir)
+
+    -- can only get here if there are no presets
+    if path == nil then
+      print("no presets found")
+      redraw()
+      return
+    end
+
+    -- dedupe and parse preset
+    if not paths[path] then
+      paths[path] = path
+      local notes, _ = parse_preset(path)
+      table.insert(mappings, notes)
+    end
+  end
+
+  -- create a new mapping
+  local mappings_count = #mappings
+  for k=24,107 do
+    -- randomly offset which preset we look in first
+    local start_search = math.random(mappings_count)
+    for i=1, mappings_count do
+      local m = mappings[(start_search + i) % mappings_count + 1]
+      if m[k] then
+        generated_preset[k] = m[k]
+        break
+      end
+    end
+  end
+
+  -- generate names based off of the notes in the chords
+  -- holding onto old names might not make sense since
+  -- ex: they could be based on scale degrees
+  for k,v in pairs(generated_preset) do
+    local notes = {}
+    for _,n in pairs(v) do
+      table.insert(notes, n)
+    end
+
+    table.sort(notes)
+    notes = musicutil.note_nums_to_names(notes, true)
+    local name = table.concat(notes, " ")
+    next_mapping_names[k] = name
+  end
+
+  -- update state
+  note_to_notes = generated_preset
+  mapping_names = next_mapping_names
+  selected_preset_name = "random"
+  dirty = true
+  page = 0
   redraw()
 end
 
@@ -583,6 +666,7 @@ function draw_settings_page()
   
   draw_line(yOffset + 50, "save preset", "", active_settings_index==6)
   draw_line(yOffset + 60, "load random preset", "", active_settings_index==7)
+  draw_line(yOffset + 70, "mapping from presets", "", active_settings_index==8)
 end
 
 -- draw a selectable line of text
@@ -754,12 +838,16 @@ function handle_settings_key(n,z)
       textentry.enter(save_preset, default, "save to presets/user")
     elseif active_settings_index == 7 then
       -- load a random preset
+      -- TODO give feedback if user doesn't have any presets
       local random_preset = get_random_preset_path()
       if random_preset then
         load_preset(random_preset)
       else
         redraw()
       end
+    elseif active_settings_index == 8 then
+      print("here")
+      generate_random_preset()
     end
   end
 end
@@ -783,7 +871,7 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 7)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 8)
   elseif n == 3 then
     if active_settings_index == 1 then
       -- MIDI in device
