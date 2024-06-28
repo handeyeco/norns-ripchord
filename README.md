@@ -44,5 +44,6 @@ Onscreen Keyboard
 - `preset: !`: the exclamation point is saying the preset has been changed but not saved
 - **legato**: handles whether a note being played by two mappings should play twice (_false_) or not (_true_)
 - **use nearest map**: if a note is played but doesn't have a mapping, the nearest mapping is played instead
+- **save preset**: triggers the save preset flow; user presets are saved in `dust/data/ripchord/presets/user`
 - **load random preset**: randomly loads a preset from your `dust/data/ripchord/presets` folder
 - **mapping from presets**: opens a few random presets from your `dust/data/ripchord/presets` folder and makes a new preset from random chords in the saved presets
