@@ -384,27 +384,41 @@ function load_preset(path)
   -- stash the preset name
   local split_at = string.match(path, "^.*()/")
   selected_preset_name = string.sub(path, split_at + 1, #path - 4)
-  
+
   dirty = false
 
   redraw()
 end
 
 -- get a random preset from "ripchord/presets" and subdirectories
--- start_dir is an optional starting point to look
-function get_random_preset_path(start_dir)
-  -- return to main page
-  page = 0
-
-  local dir = start_dir or preset_dir
+function get_random_preset_path()
+  -- shake up which dir to look through
+  -- since one preset pack could have thousands of presets
+  local preset_dirs = {}
+  local pfile = io.popen('find "'..preset_dir..'" -type d -maxdepth 1')
+  for filename in pfile:lines() do
+    table.insert(preset_dirs, filename)
+  end
+  pfile:close()
+  local rand_dir = preset_dirs[math.random(#preset_dirs)]
 
   -- find all presets
   local all_presets = {}
-  local pfile = io.popen('find "'..dir..'" -name *.rpc')
+  local pfile = io.popen('find "'..rand_dir..'" -name *.rpc')
   for filename in pfile:lines() do
     table.insert(all_presets, filename)
   end
   pfile:close()
+
+  -- if we opened a dir without presets,
+  -- try again with all presets
+  if #all_presets == 0 then
+    pfile = io.popen('find "'..preset_dir..'" -name *.rpc')
+    for filename in pfile:lines() do
+      table.insert(all_presets, filename)
+    end
+    pfile:close()
+  end
 
   -- return a random one, if there are any
   if #all_presets > 0 then
@@ -476,20 +490,9 @@ function generate_random_preset()
   local paths = {}
   local mappings = {}
 
-  -- need this to shake up preset dirs
-  local preset_dirs = {}
-  local pfile = io.popen('find "'..preset_dir..'" -type d -maxdepth 1')
-  for filename in pfile:lines() do
-    table.insert(preset_dirs, filename)
-  end
-  pfile:close()
-
   -- pick a palette of presets to sift through for chords
   for i=1, num_presets do
-    -- shake up which dir to look through
-    -- since one preset pack could have thousands of presets
-    local rand_dir = preset_dirs[math.random(#preset_dirs)]
-    local path = get_random_preset_path(rand_dir)
+    local path = get_random_preset_path()
 
     -- can only get here if there are no presets
     if path == nil then
@@ -842,11 +845,11 @@ function handle_settings_key(n,z)
       local random_preset = get_random_preset_path()
       if random_preset then
         load_preset(random_preset)
-      else
-        redraw()
+        -- return to main page
+        page = 0
       end
+      redraw()
     elseif active_settings_index == 8 then
-      print("here")
       generate_random_preset()
     end
   end
