@@ -485,9 +485,9 @@ function draw_ripchord_page()
   screen.text("output transpose: "..transpose_output)
 
   -- input keyboard
-  draw_keyboard(44, pressed_notes, note_to_notes)
+  draw_keyboard(40, pressed_notes, note_to_notes)
   -- output keyboard
-  draw_keyboard(54, active_notes, {})
+  draw_keyboard(50, active_notes, {})
 
   -- key: mapping text
   -- ie "C: C Major"
@@ -498,7 +498,7 @@ function draw_ripchord_page()
     if mapping_name_to_display and mapping_name_to_display ~= "" then
       mapping_to_display = mapping_to_display..": "..mapping_name_to_display
     end
-    screen.move(1, 64)
+    screen.move(1, 60)
     screen.level(2)
     screen.text(mapping_to_display)
   end
