@@ -327,8 +327,9 @@ end
 -- parse a Ripchord preset (.rpc)
 -- TODO: make this more resilient to poorly formatted files
 function parse_preset(path)
-  -- clear old preset
-  note_to_notes = {}
+  local next_note_map = {}
+  local next_name_map = {}
+
   local inNote = nil
   local outNotes = {}
   local i, j, match
@@ -351,16 +352,18 @@ function parse_preset(path)
         note = tonumber(token)
         outNotes[note] = note
       end
-      note_to_notes[tonumber(inNote)] = outNotes
+      next_note_map[tonumber(inNote)] = outNotes
     end
 
     -- stash mapping name
     i, j = string.find(line, 'name="[^"]+"')
     if i and j then
       match = string.sub(line,i+6,j-1)
-      mapping_names[tonumber(inNote)] = match
+      next_name_map[tonumber(inNote)] = match
     end
   end
+
+  return next_note_map, next_name_map
 end
 
 -- load a Ripchord preset (.rpc)
@@ -374,7 +377,7 @@ function load_preset(path)
     return
   else
     f:close()
-    parse_preset(path)
+    note_to_notes, mapping_names = parse_preset(path)
   end
 
   -- stash the preset name
@@ -384,9 +387,9 @@ function load_preset(path)
   redraw()
 end
 
--- load a random preset from "ripchord/presets" and subdirectories
+-- get a random preset from "ripchord/presets" and subdirectories
 -- TODO give feedback if user doesn't have any presets
-function load_random_preset()
+function get_random_preset_path()
   -- return to main page
   page = 0
 
@@ -398,13 +401,12 @@ function load_random_preset()
   end
   pfile:close()
 
-  -- load a random one, if there are any
+  -- return a random one, if there are any
   if #all_presets > 0 then
-    local random_preset = all_presets[math.random(#all_presets)]
-    load_preset(random_preset)
-  else
-    redraw()
+    return all_presets[math.random(#all_presets)]
   end
+
+  return nil
 end
 
 -- convert in-memory mapping to a Ripchord preset (.rpc) which is XML
@@ -752,7 +754,12 @@ function handle_settings_key(n,z)
       textentry.enter(save_preset, default, "save to presets/user")
     elseif active_settings_index == 7 then
       -- load a random preset
-      load_random_preset()
+      local random_preset = get_random_preset_path()
+      if random_preset then
+        load_preset(random_preset)
+      else
+        redraw()
+      end
     end
   end
 end
