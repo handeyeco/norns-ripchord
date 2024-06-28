@@ -96,6 +96,7 @@ function init()
   params:set_action("midi_out_channel", function() setup_midi_callback() end)
 
   params:add_binary("setting_legato", "legato", "toggle", 0)
+  params:add_binary("setting_only_mapped", "use nearest map", "toggle", 0)
 
   setup_midi_callback()
 end
@@ -173,30 +174,53 @@ function update_map_name_state(note, on)
   end
 end
 
+function find_nearest_mapped_note(start)
+  for i=1, 128 do
+    if start+i < 128 and note_to_notes[start+i] then
+      return start+i
+    elseif start-i > 0 and note_to_notes[start-i] then
+      return start-i
+    end
+  end
+
+  return nil
+end
+
 -- compare the current state of notes being played to a new state
 -- if there are new notes, send those
 -- if there are active notes that are now inactive, turn those off
 function diff_output(newly_pressed)
+  local play_only_mapped = params:get("setting_only_mapped")
   local next_notes = {}
+
+  -- handle "no wrong notes" setting for new notes (staccato)
+  local newly_pressed_mapped = newly_pressed
+  if (
+    play_only_mapped == 1
+    and newly_pressed
+    and note_to_notes[newly_pressed_mapped] == nil
+  ) then
+    newly_pressed_mapped = find_nearest_mapped_note(newly_pressed_mapped)
+  end
 
   -- handle staccato (legato off): when they play a note that's already
   -- playing, play it again
   local legato = params:get("setting_legato")
   local staccato_notes = {}
-  if newly_pressed and legato == 0 then
-    if note_to_notes[newly_pressed] then
-      for _, mapped_note in pairs(note_to_notes[newly_pressed]) do
+  if newly_pressed_mapped and legato == 0 then
+    if note_to_notes[newly_pressed_mapped] then
+      for _, mapped_note in pairs(note_to_notes[newly_pressed_mapped]) do
         local transposed = mapped_note + transpose_output
         staccato_notes[transposed] = transposed
       end
     else
-      local transposed = newly_pressed + transpose_output
+      local transposed = newly_pressed_mapped + transpose_output
       staccato_notes[transposed] = transposed
     end
 
     for _, staccato_note in pairs(staccato_notes) do
       if active_notes[staccato_note] then
-        -- TODO: this seems dangerous, but I don't know why
+        -- TODO: this seems dangerous, but I don't know why.
         -- trying to force the note to replay
         active_notes[staccato_note] = nil
         out_midi:note_off(staccato_note, 100, params:get("midi_out_channel"))
@@ -206,13 +230,18 @@ function diff_output(newly_pressed)
 
   -- determine which notes need to be playing
   for _, pressed_note in pairs(pressed_notes) do
-    if note_to_notes[pressed_note] then
-      for _, mapped_note in pairs(note_to_notes[pressed_note]) do
+    local map_key = pressed_note
+    if play_only_mapped == 1 and note_to_notes[map_key] == nil then
+      map_key = find_nearest_mapped_note(map_key)
+    end
+
+    if note_to_notes[map_key] then
+      for _, mapped_note in pairs(note_to_notes[map_key]) do
         local transposed = mapped_note + transpose_output
         next_notes[transposed] = transposed
       end
     else
-      local transposed = pressed_note + transpose_output
+      local transposed = map_key + transpose_output
       next_notes[transposed] = transposed
     end
   end
@@ -663,13 +692,20 @@ function draw_settings_page()
   draw_line(yOffset + 20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
   draw_line(yOffset + 30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
 
-  local legato_text
-  if params:get("setting_legato") == 1 then legato_text = "true" else legato_text = "false" end
-  draw_line(yOffset + 40, "legato", legato_text, active_settings_index==5)
+  draw_line(
+    yOffset + 40,
+    "legato",
+    (params:get("setting_legato") == 1 and "true" or "false"),
+    active_settings_index==5)
+  draw_line(
+    yOffset + 50,
+    "use nearest map",
+    (params:get("setting_only_mapped") == 1 and "true" or "false"),
+    active_settings_index==6)
   
-  draw_line(yOffset + 50, "save preset", "", active_settings_index==6)
-  draw_line(yOffset + 60, "load random preset", "", active_settings_index==7)
-  draw_line(yOffset + 70, "mapping from presets", "", active_settings_index==8)
+  draw_line(yOffset + 60, "save preset", "", active_settings_index==7)
+  draw_line(yOffset + 70, "load random preset", "", active_settings_index==8)
+  draw_line(yOffset + 80, "mapping from presets", "", active_settings_index==9)
 end
 
 -- draw a selectable line of text
@@ -832,14 +868,14 @@ end
 -- callback for keys on the setting page
 function handle_settings_key(n,z)
   if n == 3 then
-    if active_settings_index == 6 then
+    if active_settings_index == 7 then
       -- trigger preset save flow when "save" option is selected
       local default = ""
       if selected_preset_name then
         default = selected_preset_name
       end
       textentry.enter(save_preset, default, "save to presets/user")
-    elseif active_settings_index == 7 then
+    elseif active_settings_index == 8 then
       -- load a random preset
       -- TODO give feedback if user doesn't have any presets
       local random_preset = get_random_preset_path()
@@ -849,7 +885,7 @@ function handle_settings_key(n,z)
         page = 0
       end
       redraw()
-    elseif active_settings_index == 8 then
+    elseif active_settings_index == 9 then
       generate_random_preset()
     end
   end
@@ -858,7 +894,7 @@ end
 -- callback for encoders on the main page
 function handle_ripchord_enc(n,d)
   if (n == 2) then
-    -- transpost output
+    -- transpose output
     local prev_transpose_output = transpose_output
     transpose_output = util.clamp(transpose_output + d, -24, 24)
     if prev_transpose_output ~= transpose_output then
@@ -874,7 +910,7 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 8)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 9)
   elseif n == 3 then
     if active_settings_index == 1 then
       -- MIDI in device
@@ -890,6 +926,8 @@ function handle_settings_enc(n,d)
       params:set("midi_out_channel", params:get("midi_out_channel") + d)
     elseif active_settings_index == 5 then
       params:set("setting_legato", params:get("setting_legato") + d)
+    elseif active_settings_index == 6 then
+      params:set("setting_only_mapped", params:get("setting_only_mapped") + d)
     end
   end
 end
