@@ -95,6 +95,9 @@ function init()
   params:add_number("midi_out_channel", "midi out channel", 1, 16, 1)
   params:set_action("midi_out_channel", function() setup_midi_callback() end)
 
+  params:add_number("filter_low_notes", "filter low notes", 0, 127, 0)
+  params:add_number("filter_high_notes", "filter high notes", 0, 127, 127)
+
   params:add_binary("setting_legato", "legato", "toggle", 0)
   params:add_binary("setting_only_mapped", "use nearest map", "toggle", 0)
 
@@ -149,6 +152,10 @@ end
 -- HELPERS
 -- HELPERS
 -- HELPERS
+
+function isFilteredNote(note)
+  return note < params:get("filter_low_notes") or note > params:get("filter_high_notes")
+end
 
 -- generate the key_map lookup table
 function generate_key_map()
@@ -238,11 +245,15 @@ function diff_output(newly_pressed)
     if note_to_notes[map_key] then
       for _, mapped_note in pairs(note_to_notes[map_key]) do
         local transposed = mapped_note + transpose_output
-        next_notes[transposed] = transposed
+        if not isFilteredNote(transposed) then
+          next_notes[transposed] = transposed
+        end
       end
     else
       local transposed = map_key + transpose_output
-      next_notes[transposed] = transposed
+      if not isFilteredNote(transposed) then
+        next_notes[transposed] = transposed
+      end
     end
   end
 
@@ -604,7 +615,7 @@ function draw_ripchord_page()
   -- input keyboard
   draw_keyboard(40, pressed_notes, note_to_notes)
   -- output keyboard
-  draw_keyboard(50, active_notes, {})
+  draw_keyboard(50, active_notes, {}, true)
 
   -- key: mapping text
   -- ie "C: C Major"
@@ -702,10 +713,13 @@ function draw_settings_page()
     "use nearest map",
     (params:get("setting_only_mapped") == 1 and "true" or "false"),
     active_settings_index==6)
+
+  draw_line(yOffset + 60, "lowest note:", params:get("filter_low_notes"), active_settings_index==7)
+  draw_line(yOffset + 70, "highest note:", params:get("filter_high_notes"), active_settings_index==8)
   
-  draw_line(yOffset + 60, "save preset", "", active_settings_index==7)
-  draw_line(yOffset + 70, "load random preset", "", active_settings_index==8)
-  draw_line(yOffset + 80, "mapping from presets", "", active_settings_index==9)
+  draw_line(yOffset + 80, "save preset", "", active_settings_index==9)
+  draw_line(yOffset + 90, "load random preset", "", active_settings_index==10)
+  draw_line(yOffset + 100, "mapping from presets", "", active_settings_index==11)
 end
 
 -- draw a selectable line of text
@@ -727,9 +741,16 @@ function draw_line(yPos, leftText, rightText, active)
 end
 
 -- draw an individual key on the keyboard
-function draw_key(xPos, yPos, highlighted, filled)
+function draw_key(xPos, yPos, highlighted, filled, filtered)
   -- don't draw outside of set bounds
   if xPos < 8 or xPos > 118 then
+    return
+  end
+
+  if filtered then
+    screen.level(1)
+    screen.pixel(xPos, yPos)
+    screen.fill()
     return
   end
 
@@ -749,7 +770,7 @@ function draw_key(xPos, yPos, highlighted, filled)
 end
 
 -- draw a fill keyboard
-function draw_keyboard(yPos, notesToHighlight, notesToFill)
+function draw_keyboard(yPos, notesToHighlight, notesToFill, hideFilteredNotes)
   local sorted_keys = tab.sort(key_map)
 
   -- handle moving the keyboard left/right
@@ -759,11 +780,12 @@ function draw_keyboard(yPos, notesToHighlight, notesToFill)
     local name = key_map[note]
     local highlight = notesToHighlight[note]
     local fill = notesToFill[note]
+    local filter = hideFilteredNotes and isFilteredNote(note)
 
     -- check if it's a white or black key by name
     if string.len(name) == 2 then
       -- white keys
-      draw_key(xPos, yPos, highlight, fill)
+      draw_key(xPos, yPos, highlight, fill, filter)
 
       -- mark middle c
       if note == 60 then
@@ -779,7 +801,7 @@ function draw_keyboard(yPos, notesToHighlight, notesToFill)
     else
       -- black keys
       xPos = xPos - 2
-      draw_key(xPos, yPos - 4, highlight, fill)
+      draw_key(xPos, yPos - 4, highlight, fill, filter)
       xPos = xPos + 2
     end
   end
@@ -868,14 +890,14 @@ end
 -- callback for keys on the setting page
 function handle_settings_key(n,z)
   if n == 3 then
-    if active_settings_index == 7 then
+    if active_settings_index == 9 then
       -- trigger preset save flow when "save" option is selected
       local default = ""
       if selected_preset_name then
         default = selected_preset_name
       end
       textentry.enter(save_preset, default, "save to presets/user")
-    elseif active_settings_index == 8 then
+    elseif active_settings_index == 10 then
       -- load a random preset
       -- TODO give feedback if user doesn't have any presets
       local random_preset = get_random_preset_path()
@@ -885,7 +907,7 @@ function handle_settings_key(n,z)
         page = 0
       end
       redraw()
-    elseif active_settings_index == 9 then
+    elseif active_settings_index == 11 then
       generate_random_preset()
     end
   end
@@ -928,6 +950,10 @@ function handle_settings_enc(n,d)
       params:set("setting_legato", params:get("setting_legato") + d)
     elseif active_settings_index == 6 then
       params:set("setting_only_mapped", params:get("setting_only_mapped") + d)
+    elseif active_settings_index == 7 then
+      params:set("filter_low_notes", params:get("filter_low_notes") + d)
+    elseif active_settings_index == 8 then
+      params:set("filter_high_notes", params:get("filter_high_notes") + d)
     end
   end
 end
