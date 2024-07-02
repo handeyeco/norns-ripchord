@@ -187,6 +187,8 @@ function update_map_name_state(note, on)
   end
 end
 
+-- if a key doesn't have a mapping assigned to it
+-- find the nearest one that does (breadth-first)
 function find_nearest_mapped_note(start)
   for i=1, 128 do
     if start+i < 128 and note_to_notes[start+i] then
@@ -199,22 +201,28 @@ function find_nearest_mapped_note(start)
   return nil
 end
 
+-- randomly shuffle notes in array
+-- warning: mutates input
 function shuffle_notes(notes)
   for i = #notes, 2, -1 do
-      local j = math.random(i)
-      notes[i], notes[j] = notes[j], notes[i]
+    local j = math.random(i)
+    notes[i], notes[j] = notes[j], notes[i]
   end
 end
 
+-- play an individual note
+-- optionally with a delay
 function play_note(note, delay)
   if delay > 0 then
     clock.sleep(delay)
   end
   
-  out_midi:note_on(note, 100, params:get("midi_out_channel"))
   pending_notes[note] = nil
+  out_midi:note_on(note, 100, params:get("midi_out_channel"))
 end
 
+-- play a set of notes, with applied strumming
+-- (sorted and delayed)
 -- warning: mutates input
 function play_notes(notes)
   local strum_delay = params:get("strum_delay")
@@ -236,6 +244,7 @@ function play_notes(notes)
   for index, note in pairs(notes) do
     local delay = 0
     if strum_delay > 0 and index > 1 then
+      -- apply delay in milliseconds
       delay = (index-1) * strum_delay * 0.001
     end
 
@@ -312,7 +321,8 @@ function diff_output(newly_pressed)
     end
   end
 
-  -- send new notes; makes a new table that will be filtered/sorted
+  -- send new notes
+  -- makes a new table that will be filtered/sorted for strumming
   local notes_to_play = {}
   for _, next_note in pairs(next_notes) do
     if not active_notes[next_note] then
@@ -325,6 +335,7 @@ function diff_output(newly_pressed)
   for _, active_note in pairs(active_notes) do
     if not next_notes[active_note] then
       -- cancel notes that are queued to play
+      -- so there aren't hanging notes
       if pending_notes[active_note] then
         clock.cancel(pending_notes[active_note])
       end
