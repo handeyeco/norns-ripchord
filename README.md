@@ -42,6 +42,12 @@ Onscreen Keyboard
 ## Additional features
 
 - `preset: !`: the exclamation point is saying the preset has been changed but not saved
+- strumming
+  - **strum delay**: time between notes
+  - **strum sort**: the order strummed notes are played
+- output note filtering
+  - **filter low notes**: the lowest note that will be be played
+  - **filter high notes**: the highest note that will be be played
 - **legato**: handles whether a note being played by two mappings should play twice (_false_) or not (_true_)
 - **use nearest map**: if a note is played but doesn't have a mapping, the nearest mapping is played instead
 - **save preset**: triggers the save preset flow; user presets are saved in `dust/data/ripchord/presets/user`
