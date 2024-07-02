@@ -44,6 +44,8 @@ note_map_to_display = nil
 pressed_notes = {}
 -- which notes are being sent
 active_notes = {}
+-- note to clock map, for strumming
+pending_notes = {}
 
 -- output note transpose amount
 transpose_output = 0
@@ -94,6 +96,10 @@ function init()
 
   params:add_number("midi_out_channel", "midi out channel", 1, 16, 1)
   params:set_action("midi_out_channel", function() setup_midi_callback() end)
+
+  params:add_number("strum_delay", "strum delay", 0, 100, 0)
+  -- 0: no sort, 1: up, 2: down, 3: random
+  params:add_number("strum_sort", "strum sort", 0, 3, 0)
 
   params:add_number("filter_low_notes", "filter low notes", 0, 127, 0)
   params:add_number("filter_high_notes", "filter high notes", 0, 127, 127)
@@ -193,6 +199,55 @@ function find_nearest_mapped_note(start)
   return nil
 end
 
+function shuffle_notes(notes)
+  for i = #notes, 2, -1 do
+      local j = math.random(i)
+      notes[i], notes[j] = notes[j], notes[i]
+  end
+end
+
+function play_note(note, delay)
+  if delay > 0 then
+    clock.sleep(delay)
+  end
+  
+  out_midi:note_on(note, 100, params:get("midi_out_channel"))
+  pending_notes[note] = nil
+end
+
+-- warning: mutates input
+function play_notes(notes)
+  local strum_delay = params:get("strum_delay")
+  local strum_sort = params:get("strum_sort")
+
+  if strum_delay == 0 or strum_sort == 0 then
+    -- no sort, do nothing
+  elseif strum_sort == 1 then
+    -- sort up
+    table.sort(notes)
+  elseif strum_sort == 2 then
+    -- sort down
+    table.sort(notes, function(a,b) return a > b end)
+  elseif strum_sort == 3 then
+    -- random
+    shuffle_notes(notes)
+  end
+
+  for index, note in pairs(notes) do
+    local delay = 0
+    if strum_delay > 0 and index > 1 then
+      delay = (index-1) * strum_delay * 0.001
+    end
+
+    -- cancel notes that are queued to play
+    if pending_notes[note] then
+      clock.cancel(pending_notes[note])
+    end
+
+    pending_notes[note] = clock.run(play_note, note, delay)
+  end
+end
+
 -- compare the current state of notes being played to a new state
 -- if there are new notes, send those
 -- if there are active notes that are now inactive, turn those off
@@ -257,16 +312,22 @@ function diff_output(newly_pressed)
     end
   end
 
-  -- send new notes
+  -- send new notes; makes a new table that will be filtered/sorted
+  local notes_to_play = {}
   for _, next_note in pairs(next_notes) do
     if not active_notes[next_note] then
-      out_midi:note_on(next_note, 100, params:get("midi_out_channel"))
+      table.insert(notes_to_play, next_note)
     end
   end
+  play_notes(notes_to_play)
 
   -- stop old notes
   for _, active_note in pairs(active_notes) do
     if not next_notes[active_note] then
+      -- cancel notes that are queued to play
+      if pending_notes[active_note] then
+        clock.cancel(pending_notes[active_note])
+      end
       out_midi:note_off(active_note, 100, params:get("midi_out_channel"))
     end
   end
@@ -685,6 +746,21 @@ function draw_mapper_ui()
   end
 end
 
+function strum_sort_text()
+  local strum_sort = params:get("strum_sort")
+  if strum_sort == 0 then
+    return "none"
+  elseif strum_sort == 1 then
+    return "up"
+  elseif strum_sort == 2 then
+    return "down"
+  elseif strum_sort == 3 then
+    return "random"
+  else
+    return ""
+  end
+end
+
 -- settings page UI
 function draw_settings_page()
   -- handle sticky scrolling
@@ -703,23 +779,26 @@ function draw_settings_page()
   draw_line(yOffset + 20, "out:", out_midi_index .." "..midi_devices[out_midi_index], active_settings_index==3)
   draw_line(yOffset + 30, "out ch:", params:get("midi_out_channel"), active_settings_index==4)
 
+  draw_line(yOffset + 40, "strum delay:", params:get("strum_delay"), active_settings_index==5)
+  draw_line(yOffset + 50, "strum sort:", strum_sort_text(), active_settings_index==6)
+
   draw_line(
-    yOffset + 40,
+    yOffset + 60,
     "legato",
     (params:get("setting_legato") == 1 and "true" or "false"),
-    active_settings_index==5)
+    active_settings_index==7)
   draw_line(
-    yOffset + 50,
+    yOffset + 70,
     "use nearest map",
     (params:get("setting_only_mapped") == 1 and "true" or "false"),
-    active_settings_index==6)
+    active_settings_index==8)
 
-  draw_line(yOffset + 60, "lowest note:", params:get("filter_low_notes"), active_settings_index==7)
-  draw_line(yOffset + 70, "highest note:", params:get("filter_high_notes"), active_settings_index==8)
+  draw_line(yOffset + 80, "lowest note:", params:get("filter_low_notes"), active_settings_index==9)
+  draw_line(yOffset + 90, "highest note:", params:get("filter_high_notes"), active_settings_index==10)
   
-  draw_line(yOffset + 80, "save preset", "", active_settings_index==9)
-  draw_line(yOffset + 90, "load random preset", "", active_settings_index==10)
-  draw_line(yOffset + 100, "mapping from presets", "", active_settings_index==11)
+  draw_line(yOffset + 100, "save preset", "", active_settings_index==11)
+  draw_line(yOffset + 110, "load random preset", "", active_settings_index==12)
+  draw_line(yOffset + 120, "mapping from presets", "", active_settings_index==13)
 end
 
 -- draw a selectable line of text
@@ -890,14 +969,14 @@ end
 -- callback for keys on the setting page
 function handle_settings_key(n,z)
   if n == 3 then
-    if active_settings_index == 9 then
+    if active_settings_index == 11 then
       -- trigger preset save flow when "save" option is selected
       local default = ""
       if selected_preset_name then
         default = selected_preset_name
       end
       textentry.enter(save_preset, default, "save to presets/user")
-    elseif active_settings_index == 10 then
+    elseif active_settings_index == 12 then
       -- load a random preset
       -- TODO give feedback if user doesn't have any presets
       local random_preset = get_random_preset_path()
@@ -907,7 +986,7 @@ function handle_settings_key(n,z)
         page = 0
       end
       redraw()
-    elseif active_settings_index == 11 then
+    elseif active_settings_index == 13 then
       generate_random_preset()
     end
   end
@@ -932,7 +1011,7 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 9)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 13)
   elseif n == 3 then
     if active_settings_index == 1 then
       -- MIDI in device
@@ -947,12 +1026,16 @@ function handle_settings_enc(n,d)
       -- MIDI out channel
       params:set("midi_out_channel", params:get("midi_out_channel") + d)
     elseif active_settings_index == 5 then
-      params:set("setting_legato", params:get("setting_legato") + d)
+      params:set("strum_delay", params:get("strum_delay") + d)
     elseif active_settings_index == 6 then
-      params:set("setting_only_mapped", params:get("setting_only_mapped") + d)
+      params:set("strum_sort", params:get("strum_sort") + d)
     elseif active_settings_index == 7 then
-      params:set("filter_low_notes", params:get("filter_low_notes") + d)
+      params:set("setting_legato", params:get("setting_legato") + d)
     elseif active_settings_index == 8 then
+      params:set("setting_only_mapped", params:get("setting_only_mapped") + d)
+    elseif active_settings_index == 9 then
+      params:set("filter_low_notes", params:get("filter_low_notes") + d)
+    elseif active_settings_index == 10 then
       params:set("filter_high_notes", params:get("filter_high_notes") + d)
     end
   end
