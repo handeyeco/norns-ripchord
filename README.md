@@ -4,6 +4,8 @@ This is an app for [Norns](https://monome.org/docs/norns/) that reads and writes
 
 It allows you to associate a single note with a preset- or user-defined chord.
 
+Outputs both MIDI and audio (thanks to the PolyPerc engine).
+
 ## Use
 
 > [!IMPORTANT]
@@ -53,3 +55,4 @@ Onscreen Keyboard
 - **save preset**: triggers the save preset flow; user presets are saved in `dust/data/ripchord/presets/user`
 - **load random preset**: randomly loads a preset from your `dust/data/ripchord/presets` folder
 - **mapping from presets**: opens a few random presets from your `dust/data/ripchord/presets` folder and makes a new preset from random chords in the saved presets
+- **clear preset**: clears the current presets

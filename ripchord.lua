@@ -19,6 +19,9 @@ fileselect = require('fileselect')
 textentry = require('textentry')
 musicutil = require('musicutil')
 
+-- use PolyPerc for output notes along with MIDI
+engine.name = 'PolyPerc'
+
 -- paths for presets
 preset_dir = _path.data.."ripchord/presets"
 user_preset_dir = preset_dir.."/user"
@@ -84,6 +87,11 @@ function init()
   os.execute("mkdir -p "..user_preset_dir)
   generate_key_map()
   build_midi_device_list()
+
+  -- configure the synth
+  engine.release(1)
+  engine.pw(0.5)
+  engine.cutoff(1000)
 
   params:add_option("midi_in_device", "midi in device", midi_devices, 1)
   params:set_action("midi_in_device", function() setup_midi_callback() end)
@@ -218,6 +226,7 @@ function play_note(note, delay)
   end
   
   pending_notes[note] = nil
+  engine.hz(musicutil.note_num_to_freq(note))
   out_midi:note_on(note, 100, params:get("midi_out_channel"))
 end
 
@@ -499,6 +508,15 @@ function load_preset(path)
 
   dirty = false
 
+  redraw()
+end
+
+function clear_preset()
+  note_to_notes = {}
+  mapping_names = {}
+  selected_preset_name = nil
+  dirty = false
+  page = 0
   redraw()
 end
 
@@ -810,6 +828,7 @@ function draw_settings_page()
   draw_line(yOffset + 100, "save preset", "", active_settings_index==11)
   draw_line(yOffset + 110, "load random preset", "", active_settings_index==12)
   draw_line(yOffset + 120, "mapping from presets", "", active_settings_index==13)
+  draw_line(yOffset + 130, "clear preset", "", active_settings_index==14)
 end
 
 -- draw a selectable line of text
@@ -999,6 +1018,8 @@ function handle_settings_key(n,z)
       redraw()
     elseif active_settings_index == 13 then
       generate_random_preset()
+    elseif active_settings_index == 14 then
+      clear_preset()
     end
   end
 end
@@ -1022,7 +1043,7 @@ end
 function handle_settings_enc(n,d)
   if n == 2 then
     -- select which parameter to adjust
-    active_settings_index = util.clamp(active_settings_index + d, 1, 13)
+    active_settings_index = util.clamp(active_settings_index + d, 1, 14)
   elseif n == 3 then
     if active_settings_index == 1 then
       -- MIDI in device
