@@ -50,9 +50,6 @@ active_notes = {}
 -- note to clock map, for strumming
 pending_notes = {}
 
--- output note transpose amount
-transpose_output = 0
-
 -- stuff for the settings menu
 -- which item in the setting menu is selected
 active_settings_index = 1
@@ -93,17 +90,23 @@ function init()
   engine.pw(0.5)
   engine.cutoff(1000)
 
+  params:add_file("preset", "preset (.rpc)")
+  params:set_action("preset", function(file) load_preset(file) end)
+
+  params:add_number("transpose_output", "transpose output", -24, 24, 0)
+  params:set_action("transpose_output", diff_output)
+
   params:add_option("midi_in_device", "midi in device", midi_devices, 1)
-  params:set_action("midi_in_device", function() setup_midi_callback() end)
+  params:set_action("midi_in_device", setup_midi_callback)
 
   params:add_number("midi_in_channel", "midi in channel", 1, 16, 1)
-  params:set_action("midi_in_channel", function() setup_midi_callback() end)
+  params:set_action("midi_in_channel", setup_midi_callback)
 
   params:add_option("midi_out_device", "midi out device", midi_devices, 1)
-  params:set_action("midi_out_device", function()  setup_midi_callback() end)
+  params:set_action("midi_out_device", setup_midi_callback)
 
   params:add_number("midi_out_channel", "midi out channel", 1, 16, 1)
-  params:set_action("midi_out_channel", function() setup_midi_callback() end)
+  params:set_action("midi_out_channel", setup_midi_callback)
 
   params:add_number("strum_delay", "strum delay", 0, 100, 0)
   -- 0: no sort, 1: up, 2: down, 3: random
@@ -270,6 +273,7 @@ end
 -- if there are new notes, send those
 -- if there are active notes that are now inactive, turn those off
 function diff_output(newly_pressed)
+  local transpose_output = params:get("transpose_output")
   local play_only_mapped = params:get("setting_only_mapped")
   local next_notes = {}
 
@@ -490,7 +494,14 @@ end
 
 -- load a Ripchord preset (.rpc)
 function load_preset(path)
-  if not path or path == "cancel" then return end
+  if (
+    not path
+    or path == "cancel"
+    or not string.sub(path, -4) == ".rpc"
+  ) then
+    print("Load preset cancelled or invalid path")
+    return
+  end
 
   -- check if the file exists
   local f = io.open(path,"r")
@@ -699,6 +710,7 @@ function draw_ripchord_page()
   screen.move(1, 10)
   screen.text(preset_text)
 
+  local transpose_output = params:get("transpose_output")
   screen.move(1, 20)
   screen.text("output transpose: "..transpose_output)
 
@@ -987,7 +999,7 @@ function handle_ripchord_key(n,z)
 
   -- load a preset
   elseif n == 2 then
-    fileselect.enter(preset_dir, load_preset)
+    fileselect.enter(preset_dir, function(path) params:set("preset", path) end)
 
   -- trigger mapper UI
   elseif n == 3 then
@@ -1011,7 +1023,7 @@ function handle_settings_key(n,z)
       -- TODO give feedback if user doesn't have any presets
       local random_preset = get_random_preset_path()
       if random_preset then
-        load_preset(random_preset)
+        params:set("preset", random_preset)
         -- return to main page
         page = 0
       end
@@ -1027,12 +1039,7 @@ end
 -- callback for encoders on the main page
 function handle_ripchord_enc(n,d)
   if (n == 2) then
-    -- transpose output
-    local prev_transpose_output = transpose_output
-    transpose_output = util.clamp(transpose_output + d, -24, 24)
-    if prev_transpose_output ~= transpose_output then
-      diff_output()
-    end
+    params:set("transpose_output", params:get("transpose_output") + d)
   elseif (n == 3) then
     -- move keyboard left/right
     keyboard_offset = util.clamp(keyboard_offset + d, -200, 50)
