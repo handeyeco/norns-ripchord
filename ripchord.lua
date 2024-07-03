@@ -69,7 +69,7 @@ keyboard_offset = -57
 map_key_step = nil
 -- the trigger key
 map_key_input = nil
--- the output keys
+-- the output keys (sorted array)
 map_key_output = {}
 
 -- if a preset has been created/edited but not saved
@@ -169,6 +169,28 @@ end
 -- HELPERS
 -- HELPERS
 -- HELPERS
+
+-- get the index of an element in an array
+-- returns first index or -1 if not found
+function index_of(arr, elem)
+  local index = -1
+  for i, v in pairs(arr) do
+    if index < 0 and v == elem then
+      index = i
+    end
+  end
+  return index
+end
+
+-- convert array to hash map
+-- {1: "a", 2: "b"} => {"a": "a", "b": "b"}
+function arrToHash(arr)
+  local hash = {}
+  for _, v in pairs(arr) do
+    hash[v] = v
+  end
+  return hash
+end
 
 function isFilteredNote(note)
   return note < params:get("filter_low_notes") or note > params:get("filter_high_notes")
@@ -428,11 +450,13 @@ function setup_midi_callback()
         -- selecting output notes in a new mapping
         elseif map_key_step == "output" then
           -- toggle note selected / unselected
-          if map_key_output[message.note] then
-            map_key_output[message.note] = nil
+          local pos = index_of(map_key_output, message.note)
+          if pos < 0 then
+            table.insert(map_key_output, message.note)
           else
-            map_key_output[message.note] = message.note
+            table.remove(map_key_output, pos)
           end
+          table.sort(map_key_output)
         end
 
       elseif message.type == "note_off" then
@@ -737,9 +761,10 @@ end
 -- UI for making a new key mapping
 -- TODO: could this just be a separate page?
 function draw_mapper_ui()
-  local input_text = "input note"
+  screen.level(2)
+  local input_text = "input: "
   if map_key_input then
-    input_text = input_text..": "..key_map[map_key_input]
+    input_text = input_text..key_map[map_key_input]
   end
   screen.move(1, 10)
   screen.text(input_text)
@@ -766,24 +791,34 @@ function draw_mapper_ui()
   -- select the output notes
   elseif map_key_step == "output" then
     -- show the number of output notes
-    local output_count = 0
-    for _ in pairs(map_key_output) do
-      output_count = output_count + 1
+    local output_count = #map_key_output
+    local note_list_1 = ""
+    local note_list_2 = ""
+    for i, n in pairs(map_key_output) do
+      if i < 7 then
+        note_list_1 = note_list_1..musicutil.note_num_to_name(n, true).." "
+      else
+        note_list_2 = note_list_2..musicutil.note_num_to_name(n, true).." "
+      end
     end
-    local text = "output notes: "..output_count
-    screen.move(1, 20)
-    screen.text(text)
+    local text = "output: "..output_count
+    screen.move(128, 10)
+    screen.text_right(text)
 
-    draw_keyboard(44, map_key_output, {})
+    screen.level(1)
+    screen.move(1, 23)
+    screen.text(note_list_1)
+    screen.move(1, 33)
+    screen.text(note_list_2)
+
+    draw_keyboard(44, arrToHash(map_key_output), {})
 
     screen.move(2, 62)
     screen.text("back: k2")
 
     -- only show next if output notes are selected
-    if output_count > 0 then
-      screen.move(126, 62)
-      screen.text_right("next: k3")
-    end
+    screen.move(126, 62)
+    screen.text_right("next: k3")
   end
 end
 
@@ -837,7 +872,7 @@ function draw_settings_page()
   draw_line(yOffset + 80, "lowest note:", params:get("filter_low_notes"), active_settings_index==9)
   draw_line(yOffset + 90, "highest note:", params:get("filter_high_notes"), active_settings_index==10)
   
-  draw_line(yOffset + 100, "save preset", "", active_settings_index==11)
+  draw_line(yOffset + 100, "save .rpc preset", "", active_settings_index==11)
   draw_line(yOffset + 110, "load random preset", "", active_settings_index==12)
   draw_line(yOffset + 120, "mapping from presets", "", active_settings_index==13)
   draw_line(yOffset + 130, "clear preset", "", active_settings_index==14)
@@ -932,6 +967,41 @@ end
 -- HANDLERS
 -- HANDLERS
 
+-- finish mapping a note to a chord
+-- (or removing a mapping)
+function write_mapping(name, deleting)
+  print(name)
+  print(deleting)
+  -- if they hit the back button
+  if name == nil and not deleting then
+    map_key_step = "output"
+    redraw()
+    return
+  end
+
+  -- finish
+
+  -- let the user know they need to save
+  dirty = true
+
+  if not deleting then
+    -- store mapping data
+    note_to_notes[map_key_input] = arrToHash(map_key_output)
+    mapping_names[map_key_input] = name
+  else
+    -- delete mapping data
+    note_to_notes[map_key_input] = nil
+    mapping_names[map_key_input] = nil
+  end
+
+  -- reset mapper state
+  map_key_step = nil
+  map_key_input = nil
+  map_key_output = {}
+
+  redraw()
+end
+
 -- callback for keys on the new mapping page
 function handle_mapping_key(n, z)
   if n == 2 then
@@ -954,39 +1024,33 @@ function handle_mapping_key(n, z)
       -- if a mapping exists for that key load it
       if note_to_notes[map_key_input] then
         for _, v in pairs(note_to_notes[map_key_input]) do
-          map_key_output[v] = v
+          table.insert(map_key_output, v)
+          table.sort(map_key_output)
         end
       end
 
       redraw()
     elseif map_key_step == "output" then
-      -- textentry callback
-      function cb(name)
-        -- if they hit the back button
-        if (name == nil) then
-          map_key_step = "output"
-          redraw()
-          return
+      if #map_key_output == 0 then
+        -- blank mapping (ie deleting a mapping)
+        write_mapping(nil, true)
+      else
+        -- see if there's already a name for this key
+        local default = mapping_names[map_key_input]
+
+        -- otherwise make one with the notes
+        if default == nil then
+          default = ""
+          for _, note in pairs(map_key_output) do
+            default = default..musicutil.note_num_to_name(note, true).." "
+          end
+          -- remove last space
+          default = default:sub(1, -2)
         end
 
-        -- finish
-
-        -- let the user know they need to save
-        dirty = true
-
-        -- store mapping data
-        note_to_notes[map_key_input] = map_key_output
-        mapping_names[map_key_input] = name
-
-        -- reset mapper state
-        map_key_step = nil
-        map_key_input = nil
-        map_key_output = {}
-
-        redraw()
+        -- let them rename it
+        textentry.enter(write_mapping, default, "mapping name")
       end
-
-      textentry.enter(cb, "", "mapping name")
     end
   end
 end

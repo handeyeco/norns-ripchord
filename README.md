@@ -8,6 +8,9 @@ Outputs both MIDI and audio (thanks to the PolyPerc engine).
 
 ## Use
 
+> [!CAUTION]
+> If you see `preset: !` that means your note-to-chord mapping is not saved. Saving Ripchord presets is different than saving Norns PSETs. PSETs save a reference to a Ripchord file, not the Ripchord mapping itself. If there is no Ripchord file written, there is no reference to it.
+
 > [!IMPORTANT]
 > If you're having trouble getting MIDI, check the settings page (e1) _and_ your device settings (SYSTEM > DEVICES > MIDI).
 
