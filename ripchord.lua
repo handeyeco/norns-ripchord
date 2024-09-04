@@ -463,7 +463,13 @@ function setup_midi_callback()
         pressed_notes[message.note] = nil
         diff_output()
         update_map_name_state(message.note, false)
+      else
+        -- forward non-note on/off messages
+        out_midi:send(data)
       end
+    else
+      -- forward messages from different MIDI channels
+      out_midi:send(data)
     end
   
     redraw()
