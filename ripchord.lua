@@ -75,6 +75,10 @@ map_key_output = {}
 -- if a preset has been created/edited but not saved
 dirty = false
 
+-- we're in someone else's UI, so be careful
+in_fileselect = false
+in_textentry = false
+
 -- NORNS LIFECYCLE CALLBACKS
 -- NORNS LIFECYCLE CALLBACKS
 -- NORNS LIFECYCLE CALLBACKS
@@ -131,7 +135,7 @@ function enc(n,d)
   elseif (page == 1) then
     handle_settings_enc(n,d)
   end
-  redraw()
+  maybe_redraw()
 end
 
 -- key callback
@@ -159,6 +163,14 @@ function redraw()
     draw_settings_page()
   end
   screen.update()
+end
+
+-- more selective redrawing
+function maybe_redraw()
+  if in_fileselect or in_textentry then
+    return
+  end
+  redraw()
 end
 
 -- called when script unloads
@@ -472,7 +484,7 @@ function setup_midi_callback()
       out_midi:send(data)
     end
   
-    redraw()
+    maybe_redraw()
   end
 end
 
@@ -549,7 +561,7 @@ function load_preset(path)
 
   dirty = false
 
-  redraw()
+  maybe_redraw()
 end
 
 function clear_preset()
@@ -558,7 +570,7 @@ function clear_preset()
   selected_preset_name = nil
   dirty = false
   page = 0
-  redraw()
+  maybe_redraw()
 end
 
 -- get a random preset from "ripchord/presets" and subdirectories
@@ -633,6 +645,7 @@ function save_preset(name)
   if (name == nil or name == "") then
     return
   end
+  in_textentry = false
 
   -- make sure the user preset dir exists
   os.execute("mkdir -p "..user_preset_dir)
@@ -648,7 +661,7 @@ function save_preset(name)
   selected_preset_name = name
   page = 0
 
-  redraw()
+  maybe_redraw()
 end
 
 -- generate a random mapping by smashing together
@@ -668,7 +681,7 @@ function generate_random_preset()
     -- can only get here if there are no presets
     if path == nil then
       print("no presets found")
-      redraw()
+      maybe_redraw()
       return
     end
 
@@ -715,7 +728,7 @@ function generate_random_preset()
   selected_preset_name = "random"
   dirty = true
   page = 0
-  redraw()
+  maybe_redraw()
 end
 
 -- DRAWERS
@@ -978,10 +991,11 @@ end
 function write_mapping(name, deleting)
   print(name)
   print(deleting)
+  in_textentry = false
   -- if they hit the back button
   if name == nil and not deleting then
     map_key_step = "output"
-    redraw()
+    maybe_redraw()
     return
   end
 
@@ -1005,7 +1019,7 @@ function write_mapping(name, deleting)
   map_key_input = nil
   map_key_output = {}
 
-  redraw()
+  maybe_redraw()
 end
 
 -- callback for keys on the new mapping page
@@ -1021,7 +1035,7 @@ function handle_mapping_key(n, z)
       map_key_step = "input"
     end
 
-    redraw()
+    maybe_redraw()
   elseif n == 3 then
     if map_key_step == "input" then
       -- next
@@ -1035,7 +1049,7 @@ function handle_mapping_key(n, z)
         end
       end
 
-      redraw()
+      maybe_redraw()
     elseif map_key_step == "output" then
       if #map_key_output == 0 then
         -- blank mapping (ie deleting a mapping)
@@ -1069,12 +1083,16 @@ function handle_ripchord_key(n,z)
 
   -- load a preset
   elseif n == 2 then
-    fileselect.enter(preset_dir, function(path) params:set("preset", path) end)
+    in_fileselect = true
+    fileselect.enter(preset_dir, function(path)
+      in_fileselect = false
+      params:set("preset", path)
+    end)
 
   -- trigger mapper UI
   elseif n == 3 then
     map_key_step = "input"
-    redraw()
+    maybe_redraw()
   end
 end
 
@@ -1097,7 +1115,7 @@ function handle_settings_key(n,z)
         -- return to main page
         page = 0
       end
-      redraw()
+      maybe_redraw()
     elseif active_settings_index == 13 then
       generate_random_preset()
     elseif active_settings_index == 14 then
